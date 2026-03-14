@@ -1,0 +1,31 @@
+services:
+  # TapPass governance server
+  tappass:
+    image: tappass/tappass:latest  # or build from source
+    ports:
+      - "9620:9620"
+    environment:
+      TAPPASS_ADMIN_KEY: ${TAPPASS_ADMIN_KEY}  # set in .env file
+      OPENAI_API_KEY: ${OPENAI_API_KEY}  # your real OpenAI key
+    volumes:
+      - tappass-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9620/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Example: your agent as a FastAPI service
+  agent:
+    build: ./agent
+    ports:
+      - "8000:8000"
+    environment:
+      OPENAI_BASE_URL: http://tappass:9620/v1   # route through TapPass
+      OPENAI_API_KEY: tp_agent_key               # TapPass agent key
+    depends_on:
+      tappass:
+        condition: service_healthy
+
+volumes:
+  tappass-data:

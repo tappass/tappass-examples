@@ -1,0 +1,35 @@
+# TapPass Pipeline: Regulated
+# Full compliance pipeline for financial services, healthcare, government.
+# EU AI Act, GDPR, NIS2, DORA ready.
+#
+# Import: tappass pipelines import regulated.yaml
+
+preset: regulated
+
+overrides:
+  rate_limit:
+    max_calls: 30
+    window_seconds: 3600
+
+  budget_enforcement:
+    max_cost_usd: 50.0
+    window: daily
+
+  detect_injection:
+    threshold: 0.5  # lower threshold = more sensitive
+
+  classify_data:
+    use_llm_judge: true  # LLM-assisted classification
+
+  human_approval:
+    required_for:
+      - classification: RESTRICTED
+      - classification: CONFIDENTIAL
+      - tool: send_email
+      - tool: delete_*
+
+  scan_output:
+    on_detection: block  # block, not just redact
+
+  loop_guard:
+    max_iterations: 15

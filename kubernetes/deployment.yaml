@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governed-agent
+  labels:
+    app: governed-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: governed-agent
+  template:
+    metadata:
+      labels:
+        app: governed-agent
+    spec:
+      containers:
+        # Your agent
+        - name: agent
+          image: your-agent:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: OPENAI_BASE_URL
+              value: http://localhost:9620/v1  # TapPass sidecar
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tappass-keys
+                  key: agent-key
+
+        # TapPass sidecar
+        - name: tappass
+          image: tappass/tappass:latest  # or build from source
+          ports:
+            - containerPort: 9620
+          env:
+            - name: TAPPASS_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tappass-keys
+                  key: admin-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tappass-keys
+                  key: openai-key
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9620
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

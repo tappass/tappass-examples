@@ -1,0 +1,28 @@
+# TapPass Pipeline: Standard
+# Production-ready governance for most workloads.
+# Blocks PII, injection, secrets. Full audit trail.
+#
+# Import: tappass pipelines import standard.yaml
+
+preset: standard
+
+overrides:
+  rate_limit:
+    max_calls: 50
+    window_seconds: 3600
+
+  budget_enforcement:
+    max_cost_usd: 100.0
+    window: daily
+
+  detect_injection:
+    threshold: 0.6
+
+  detect_pii:
+    on_detection: block
+
+  scan_output:
+    on_detection: redact
+
+  loop_guard:
+    max_iterations: 25

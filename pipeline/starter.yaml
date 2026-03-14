@@ -1,0 +1,21 @@
+# TapPass Pipeline: Starter
+# Minimal governance for development and internal tools.
+# Low latency. Catches the obvious stuff.
+#
+# Import: tappass pipelines import starter.yaml
+
+preset: starter
+
+overrides:
+  rate_limit:
+    max_calls: 100
+    window_seconds: 3600
+
+  detect_pii:
+    on_detection: log   # log PII, don't block in dev
+
+  detect_secrets:
+    on_detection: block  # always block secrets
+
+  detect_injection:
+    threshold: 0.8  # high threshold = fewer false positives
