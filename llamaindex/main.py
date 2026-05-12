@@ -1,26 +1,22 @@
-"""LlamaIndex RAG pipeline with TapPass governance.
+"""LlamaIndex with TapPass governance.
 
-Retrieval is local. LLM calls go through TapPass.
-PII in documents is caught before reaching the model.
+Every LLM call goes through TapPass. We use SummaryIndex (no embeddings) so
+the whole pipeline stays governed — TapPass routes chat completions, not
+the embedding endpoint.
 """
 
 import os
-from tappass import Agent
 
-from llama_index.core import VectorStoreIndex, Document, Settings
+from llama_index.core import SummaryIndex, Document, Settings
 from llama_index.llms.openai import OpenAI as LlamaOpenAI
 
 TAPPASS_URL = os.getenv("TAPPASS_URL", "http://localhost:9620")
 TAPPASS_API_KEY = os.getenv("TAPPASS_API_KEY", "tp_...")
 
-# --- Connect to TapPass ---
-
-tp = Agent(TAPPASS_URL, TAPPASS_API_KEY)
-
 llm = LlamaOpenAI(
     model="gpt-4o-mini",
-    api_base=tp.gateway_url,
-    api_key=tp.api_key,
+    api_base=f"{TAPPASS_URL}/v1",
+    api_key=TAPPASS_API_KEY,
 )
 Settings.llm = llm
 
@@ -41,7 +37,7 @@ documents = [
     )),
 ]
 
-index = VectorStoreIndex.from_documents(documents)
+index = SummaryIndex.from_documents(documents)
 query_engine = index.as_query_engine()
 
 

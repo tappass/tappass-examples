@@ -5,23 +5,24 @@ are governed, classified, and logged.
 """
 
 import os
-from tappass import Agent
+import tappass
 from crewai import Agent as CrewAgent, Crew, Task
 from crewai_tools import SerperDevTool
 
 TAPPASS_URL = os.getenv("TAPPASS_URL", "http://localhost:9620")
 TAPPASS_API_KEY = os.getenv("TAPPASS_API_KEY", "tp_...")
 
-# --- Connect to TapPass ---
+# Route CrewAI's LLM calls through TapPass (it uses the OpenAI SDK under the hood).
+os.environ["OPENAI_BASE_URL"] = f"{TAPPASS_URL}/v1"
+os.environ["OPENAI_API_KEY"] = TAPPASS_API_KEY
 
-tp = Agent(TAPPASS_URL, TAPPASS_API_KEY)
-
-# Set environment so CrewAI auto-routes through TapPass
-tp.configure_environment()
-
-# Wrap tools with governance
+# Wrap tools with governance (audit by default; set mode="enforce" to block).
 search = SerperDevTool()
-governed_tools = tp.govern([search])
+governed_tools = tappass.govern(
+    [search],
+    url=TAPPASS_URL,
+    api_key=TAPPASS_API_KEY,
+)
 
 
 # --- Define crew agents ---

@@ -12,13 +12,14 @@ tappass quickstart
 ## Run
 
 ```bash
+export TAPPASS_URL=http://localhost:9620
 export TAPPASS_API_KEY=tp_...
 python main.py
 ```
 
 ## How it works
 
-1. `tp_agent.configure_environment()` sets `OPENAI_BASE_URL` so CrewAI auto-routes through TapPass
-2. `tp_agent.govern([tools])` wraps tool executions with governance and audit logging
+1. Setting `OPENAI_BASE_URL=$TAPPASS_URL/v1` makes CrewAI's OpenAI client route through TapPass
+2. `tappass.govern([tools], ...)` wraps tool executions with governance and audit logging
 3. Every LLM call from every crew agent goes through the pipeline
 4. Every tool execution is logged to the audit trail

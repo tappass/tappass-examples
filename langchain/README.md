@@ -12,6 +12,7 @@ tappass quickstart
 ## Run
 
 ```bash
+export TAPPASS_URL=http://localhost:9620
 export TAPPASS_API_KEY=tp_...
-python main.py
+python agent.py
 ```

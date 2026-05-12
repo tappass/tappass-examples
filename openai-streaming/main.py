@@ -23,14 +23,3 @@ for chunk in stream:
     if content:
         print(content, end="", flush=True)
 print()
-
-
-# --- Using the TapPass SDK ---
-
-from tappass import Agent
-
-agent = Agent(TAPPASS_URL, TAPPASS_API_KEY)
-
-for chunk in agent.stream("Now write one about data privacy"):
-    print(chunk, end="", flush=True)
-print()

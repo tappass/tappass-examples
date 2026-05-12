@@ -10,20 +10,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from tappass import Agent, PolicyBlockError, TapPassConnectionError
+from tappass import AsyncAgent, PolicyBlockError, TapPassConnectionError
 
 TAPPASS_URL = os.getenv("TAPPASS_URL", "http://localhost:9620")
 TAPPASS_API_KEY = os.getenv("TAPPASS_API_KEY", "tp_...")
 
-agent: Agent | None = None
+agent: AsyncAgent | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent
-    agent = Agent(TAPPASS_URL, TAPPASS_API_KEY, model="gpt-4o-mini")
+    agent = AsyncAgent(TAPPASS_URL, api_key=TAPPASS_API_KEY, model="gpt-4o-mini")
     yield
-    agent.close()
+    await agent.aclose()
 
 
 app = FastAPI(title="Governed AI Service", lifespan=lifespan)
@@ -45,7 +45,7 @@ class AnalyzeResponse(BaseModel):
 async def analyze(req: AnalyzeRequest):
     """Analyze text with a governed LLM call."""
     try:
-        response = await agent.achat(
+        response = await agent.chat(
             f"Context: {req.text}\n\nQuestion: {req.question}",
         )
     except PolicyBlockError as e:
@@ -60,8 +60,6 @@ async def analyze(req: AnalyzeRequest):
         )
     except TapPassConnectionError:
         raise HTTPException(503, "Governance service unavailable")
-    finally:
-        agent.reset()
 
     return AnalyzeResponse(
         answer=response.content,

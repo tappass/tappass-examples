@@ -1,55 +1,38 @@
 """Pydantic AI agent with TapPass governance.
 
-Structured output with type safety. Every LLM call is governed.
+Every LLM call is governed via the TapPass OpenAI-compatible gateway.
+
+Note: pydantic-ai's `output_type=BaseModel` path sends `response_format` on
+the request, which the TapPass gateway currently rejects (extra_forbidden).
+This example sticks to plain-text output until the gateway accepts the
+`response_format` field — at which point you can swap `output_type=str` for
+`output_type=PromptedOutput(RiskAssessment)` to get structured JSON back.
 """
 
 import os
-from tappass import Agent as TapPassAgent
 
-from pydantic import BaseModel
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 TAPPASS_URL = os.getenv("TAPPASS_URL", "http://localhost:9620")
 TAPPASS_API_KEY = os.getenv("TAPPASS_API_KEY", "tp_...")
 
-# --- Connect to TapPass ---
-
-tp = TapPassAgent(TAPPASS_URL, TAPPASS_API_KEY)
-
-model = OpenAIModel(
+model = OpenAIChatModel(
     "gpt-4o-mini",
-    base_url=tp.gateway_url,
-    api_key=tp.api_key,
+    provider=OpenAIProvider(
+        base_url=f"{TAPPASS_URL}/v1",
+        api_key=TAPPASS_API_KEY,
+    ),
 )
-
-
-# --- Define output schema ---
-
-class RiskAssessment(BaseModel):
-    title: str
-    key_findings: list[str]
-    risk_level: str  # low, medium, high
-    recommended_actions: list[str]
-
-
-# --- Create and run agent ---
 
 agent = Agent(
     model,
-    result_type=RiskAssessment,
     system_prompt=(
-        "You are a compliance analyst. Analyze topics and return "
-        "structured risk assessments."
+        "You are a compliance analyst. Be concise: title, three findings, "
+        "a risk level, and three recommended actions."
     ),
 )
 
 result = agent.run_sync("Analyze the impact of the EU AI Act on AI agent deployments")
-
-assessment = result.data
-print(f"Title: {assessment.title}")
-print(f"Risk: {assessment.risk_level}")
-for finding in assessment.key_findings:
-    print(f"  - {finding}")
-for action in assessment.recommended_actions:
-    print(f"  > {action}")
+print(result.output)
