@@ -5,7 +5,7 @@ Type-safe structured output agent with TapPass governance on every LLM call.
 ## Setup
 
 ```bash
-pip install tappass pydantic-ai
+pip install "tappass>=0.7.0,<0.8" pydantic-ai
 tappass quickstart
 ```
 

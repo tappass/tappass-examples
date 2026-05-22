@@ -5,7 +5,7 @@ The simplest integration. Change `base_url` and every OpenAI call runs through T
 ## Setup
 
 ```bash
-pip install openai tappass
+pip install openai "tappass>=0.7.0,<0.8"
 tappass quickstart
 ```
 

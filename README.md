@@ -19,7 +19,7 @@ TapPass sits between your AI agents and the LLM. Every call is scanned for PII, 
 
 ```bash
 # Install TapPass
-pip install tappass
+pip install "tappass>=0.7.0,<0.8"
 
 # Start the server + register your first agent
 tappass quickstart
@@ -88,7 +88,7 @@ TapPass Gateway ── governance pipeline ──> LLM / Tool
 ## Requirements
 
 - Python 3.10+
-- `pip install tappass`
+- `pip install "tappass>=0.7.0,<0.8"`
 - A running TapPass server (`tappass up`)
 
 ## Links

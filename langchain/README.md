@@ -5,7 +5,7 @@ TapPass governs both the LLM calls and tool executions in a LangChain agent.
 ## Setup
 
 ```bash
-pip install tappass langchain langchain-openai
+pip install "tappass>=0.7.0,<0.8" langchain langchain-openai
 tappass quickstart
 ```
 

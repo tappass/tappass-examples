@@ -5,7 +5,7 @@ TapPass governs the LLM calls in your RAG pipeline. Retrieval happens locally, b
 ## Setup
 
 ```bash
-pip install tappass llama-index llama-index-llms-openai
+pip install "tappass>=0.7.0,<0.8" llama-index llama-index-llms-openai
 tappass quickstart
 ```
 
