@@ -5,7 +5,7 @@ TapPass governs all LLM calls and tool executions across an entire CrewAI crew. 
 ## Setup
 
 ```bash
-pip install tappass crewai crewai-tools
+pip install "tappass>=0.7.0,<0.8" crewai crewai-tools
 tappass quickstart
 ```
 

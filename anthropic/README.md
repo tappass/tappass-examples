@@ -5,7 +5,7 @@ TapPass has a native Anthropic Messages API gateway. Point the Anthropic SDK at 
 ## Setup
 
 ```bash
-pip install anthropic tappass
+pip install anthropic "tappass>=0.7.0,<0.8"
 tappass quickstart
 ```
 

@@ -5,7 +5,7 @@ A production-ready FastAPI service where every LLM call goes through TapPass gov
 ## Setup
 
 ```bash
-pip install tappass fastapi uvicorn
+pip install "tappass>=0.7.0,<0.8" fastapi uvicorn
 tappass quickstart
 ```
 

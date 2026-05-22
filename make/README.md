@@ -11,7 +11,7 @@ Make's OpenAI modules let you set a custom API URL. Point them at TapPass and al
 ### 1. Start TapPass
 
 ```bash
-pip install tappass
+pip install "tappass>=0.7.0,<0.8"
 tappass quickstart
 ```
 

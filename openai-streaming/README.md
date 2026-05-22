@@ -5,7 +5,7 @@ Streaming works identically through TapPass. The governance pipeline runs on the
 ## Run
 
 ```bash
-pip install openai tappass
+pip install openai "tappass>=0.7.0,<0.8"
 export TAPPASS_API_KEY=tp_...
 python main.py
 ```

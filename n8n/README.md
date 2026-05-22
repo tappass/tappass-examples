@@ -11,7 +11,7 @@ n8n's AI nodes (OpenAI Chat, AI Agent, AI Chain) use the OpenAI API under the ho
 ### 1. Start TapPass
 
 ```bash
-pip install tappass
+pip install "tappass>=0.7.0,<0.8"
 tappass quickstart
 ```
 
