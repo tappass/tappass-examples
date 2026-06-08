@@ -29,10 +29,17 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
     for _ in range(max_steps):
         try:
             resp = client.chat.completions.create(
-                model=s.model, messages=messages,
-                tools=schemas or None)
-        except Exception as e:  # gateway block / approval surface as HTTP errors
-            print(f"\n[GOVERNANCE] call stopped: {type(e).__name__}: {e}")
+                model=s.model, messages=messages, tools=schemas or None)
+        except Exception as e:
+            # NOTE: the exact wire shape of a TapPass gateway block/redaction/approval
+            # on /v1/chat/completions is confirmed in the live verification task; until
+            # then, surface the real error instead of calling everything "governance".
+            status = getattr(e, "status_code", None)
+            body = getattr(getattr(e, "response", None), "text", None)
+            if status is not None:
+                print(f"\n[GATEWAY {status}] {body or e}")
+            else:
+                print(f"\n[ERROR] {type(e).__name__}: {e}")
             return
         msg = resp.choices[0].message
         if not msg.tool_calls:
@@ -42,7 +49,10 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments or "{}")
             print(f"[TOOL] {tc.function.name}({args})")
-            result = dispatch(tc.function.name, args)
+            try:
+                result = dispatch(tc.function.name, args)
+            except Exception as e:
+                result = {"error": f"{type(e).__name__}: {e}"}
             messages.append({"role": "tool", "tool_call_id": tc.id,
                              "content": json.dumps(result)})
     print("\n[done: step budget reached]")

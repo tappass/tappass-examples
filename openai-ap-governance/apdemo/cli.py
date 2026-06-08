@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from . import agent as agent_mod
@@ -41,15 +42,19 @@ def main(argv: list[str] | None = None) -> int:
             "TAPPASS_AGENT_KEY": out["agent_key"],
             "TAPPASS_AGENT_UUID": out["agent_uuid"],
             "TAPPASS_POLICY_ID": out["policy_id"],
+            "TAPPASS_VERSION_MAP": json.dumps(out["version_map"]),
         }))
-        print(f"# version_map: {out['version_map']}")
         return 0
 
     if args.cmd == "activate":
         cp = ControlPlane(s)
         if not s.policy_id or not s.agent_uuid:
             raise SystemExit("Run `apdemo setup` and fill .env first.")
-        cp.publish(s.policy_id, args.version)
+        server_no = s.version_map.get(args.version, args.version)
+        if not s.version_map:
+            print("WARNING: TAPPASS_VERSION_MAP not set; assuming server version_no == demo version. "
+                  "Re-run `apdemo setup` and copy ALL printed vars into .env to be safe.")
+        cp.publish(s.policy_id, server_no)
         cp.assign(s.policy_id, s.agent_uuid)
         print(f"Activated + assigned policy version {args.version}.")
         return 0
@@ -66,8 +71,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "teardown":
         print("Teardown: delete the agent + policy in the dashboard, or extend "
-              "ControlPlane with delete calls (see Task 10).")
-        return 0
+              "ControlPlane with delete calls (see Task 10).", file=sys.stderr)
+        return 1
 
     return 1
 

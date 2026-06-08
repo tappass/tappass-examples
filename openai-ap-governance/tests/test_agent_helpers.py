@@ -5,7 +5,8 @@ from apdemo.config import Settings
 def _settings(**kw):
     base = dict(url="https://app.tappass.ai", pat=None, agent_key="tp_dev_x",
                 agent_uuid="ag_1", policy_id="p1", model="gpt-4o-mini",
-                openai_api_key="sk-test", owner_email="d@e.com")
+                openai_api_key="sk-test", owner_email="d@e.com",
+                version_map={})
     base.update(kw)
     return Settings(**base)
 

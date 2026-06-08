@@ -1,4 +1,4 @@
-from apdemo.rules import rules_for_version
+from apdemo.rules import rules_for_version, _PAYMENT_THRESHOLD
 
 
 def test_v1_is_allow_all():
@@ -33,6 +33,13 @@ def test_v5_conditional_bank_change_and_threshold():
     flat = {s for group in signals for s in group}
     assert "request.tool" in flat
 
+    # Also assert the amount-threshold rule is present and correct
+    leaves = [leaf for c in conds for leaf in _leaf_triples(c["payload"]["when"])]
+    signals_only = {sig for sig, _, _ in leaves}
+    assert "request.args.amount" in signals_only
+    assert any(op == "gt" and val == _PAYMENT_THRESHOLD
+               for _, op, val in leaves)
+
 
 def test_v6_blocks_weak_classification():
     rs = rules_for_version(6)
@@ -48,4 +55,15 @@ def _leaf_signals(node):
     out = []
     for child in node.get(key, []):
         out += _leaf_signals(child)
+    return out
+
+
+def _leaf_triples(node):
+    """Return (signal, op, value) tuples for all leaf nodes."""
+    if "signal" in node:
+        return [(node["signal"], node.get("op"), node.get("value"))]
+    key = "all" if "all" in node else "any"
+    out = []
+    for child in node.get(key, []):
+        out += _leaf_triples(child)
     return out

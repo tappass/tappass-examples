@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import ast
 import operator as _op
-from typing import Any, Callable
+from typing import Callable
 
 from . import catalog
 
@@ -37,7 +37,7 @@ def _lookup_vendor(args: dict) -> dict:
 def _compute_invoice_total(args: dict) -> dict:
     subtotal = round(sum(float(li["amount"]) for li in args["line_items"]), 2)
     tax = round(subtotal * float(args.get("tax_rate", 0.0)), 2)
-    return {"subtotal": subtotal, "tax": round(tax, 2), "total": round(subtotal + tax, 2)}
+    return {"subtotal": subtotal, "tax": tax, "total": round(subtotal + tax, 2)}
 
 
 def _schedule_payment(args: dict) -> dict:
@@ -88,7 +88,7 @@ _REGISTRY: dict[str, tuple[int, dict, Callable[[dict], dict]]] = {
         "set_asset_classification", "Set the data classification of a catalog asset.",
         {"asset_id": {"type": "string"},
          "classification": {"type": "string",
-                            "enum": ["public", "internal", "confidential", "restricted"]}},
+                            "enum": catalog.CLASSIFICATION_ORDER}},
         ["asset_id", "classification"]), _set_asset_classification),
     "propose_schema_change": (6, _schema(
         "propose_schema_change", "Propose a schema change to a catalog asset.",
@@ -107,4 +107,7 @@ def tools_for_version(n: int) -> tuple[list[dict], dict[str, Callable[[dict], di
 
 
 def dispatch(name: str, args: dict) -> dict:
-    return _REGISTRY[name][2](args)
+    entry = _REGISTRY.get(name)
+    if entry is None:
+        return {"error": f"unknown tool: {name}"}
+    return entry[2](args)

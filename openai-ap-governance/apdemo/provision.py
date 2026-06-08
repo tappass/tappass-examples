@@ -11,8 +11,6 @@ Endpoints verified against core repo:
 """
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 
 from .config import Settings
@@ -92,6 +90,7 @@ class ControlPlane:
             f"/api/v2/policies/{policy_id}/versions/{version_no}/publish")
 
     def pull_back(self, policy_id: str, version_no: int) -> dict:
+        """Re-activate a previously-superseded version (used when re-running the demo or stepping backward)."""
         return self._post(
             f"/api/v2/policies/{policy_id}/versions/{version_no}/pull-back")
 
