@@ -48,7 +48,26 @@ gateway returns a `call_llm` block ("LLM call failed").
 - **Tool args** are exposed to Rego as **`request.tool_args.*`** (NOT
   `request.args.*`). `signal_catalog.py` confirms `request.tool_args.*`.
 
-## 🐛 OPEN — Conditional rules don't fire (server-side, owner to diagnose)
+## ✅ FIXED & DEPLOYED — Conditional rules now fire
+
+Root cause: `compose_agent` (kernel/policy/bundle.py) rebuilt the
+`data.tappass.rules` sidecar from raw `r.payload`. For simple kinds the
+rendered sidecar equals the payload, so it was invisible — but a Conditional's
+compiled sidecar is `{v, reads}` (the literals the Rego reads as `.v[...]`), NOT
+the raw `{when, then}`. So `data.tappass.rules[id].v` was absent → every leaf
+compared against undefined → silent allow. Fix: a pure `sidecar_for_rules()`
+helper builds the sidecar with the SAME `render()` that built the Rego.
+Shipped in PR #651 → v0.8.27 (prod). Verified live: a re-activated v6
+`set_asset_classification(classification="internal")` now returns
+`block | rule_kind=Conditional`. Re-activate (recompose) after deploy is required
+— the fix only affects newly-composed bundles.
+
+NOTE: Conditional `require_approval` actions (v5 threshold/bank, v6 schema) now
+MATCH correctly but still return `allow` on the decision-only `/v1/govern` path
+(approval is an obligation; only mediated execution escalates — see below).
+
+---
+### Original diagnosis (kept for reference)
 
 `BlockTool` works, but `Conditional` rules (v5 amount threshold, v6
 classification block) evaluate to `allow` despite **correct-looking compiled
