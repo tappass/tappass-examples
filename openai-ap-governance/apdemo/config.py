@@ -15,6 +15,7 @@ class Settings:
     pat: str | None
     agent_key: str | None
     agent_uuid: str | None
+    agent_id: str
     policy_id: str | None
     model: str
     openai_api_key: str | None
@@ -27,6 +28,7 @@ class Settings:
             pat=os.getenv("TAPPASS_PAT") or None,
             agent_key=os.getenv("TAPPASS_AGENT_KEY") or None,
             agent_uuid=os.getenv("TAPPASS_AGENT_UUID") or None,
+            agent_id=os.getenv("TAPPASS_AGENT_ID", "ap-demo-agent"),
             policy_id=os.getenv("TAPPASS_POLICY_ID") or None,
             model=os.getenv("TAPPASS_MODEL", "gpt-4o-mini"),
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,

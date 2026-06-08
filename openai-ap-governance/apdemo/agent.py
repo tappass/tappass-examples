@@ -1,8 +1,20 @@
-"""The AP agent: OpenAI agentic loop, governed via the TapPass gateway (v1+)."""
+"""The AP agent: OpenAI agentic loop, governed via TapPass.
+
+Two governance touch-points (v1+):
+  * the LLM call routes through the TapPass gateway (base_url swap) — so output
+    PII/secret scanning (v2) and audit/cost happen on the chat itself;
+  * every TOOL CALL is submitted to /v1/govern BEFORE it runs, and the verdict
+    is honored: block -> don't run; require_approval obligation -> halt and
+    surface it (a reviewer approves in the dashboard in production); allow -> run.
+
+v0 talks to OpenAI directly with no governance — the ungoverned baseline.
+"""
 from __future__ import annotations
 
 import json
+import uuid
 
+import httpx
 from openai import OpenAI
 
 from .config import Settings
@@ -18,9 +30,52 @@ def build_client_kwargs(version: int, s: Settings) -> dict:
     return {"base_url": f"{s.url}/v1", "api_key": s.require_agent_key()}
 
 
+def govern_tool_call(s: Settings, name: str, args: dict, session_id: str) -> tuple[str, dict]:
+    """Submit a TOOL_CALL to /v1/govern (decision-only). Returns (decision, detail)
+    where decision is "allow" | "block" | "approval".
+
+    The decision path returns allow/block and any obligations; a require_approval
+    obligation means TapPass has determined a human reviewer must approve before
+    this action runs. Fail closed: a governance outage blocks the tool.
+    """
+    behavior = {
+        "type": "TOOL_CALL",
+        "agent_id": s.agent_id,
+        "session_id": session_id,
+        "behavior_id": uuid.uuid4().hex,
+        "payload": {"tool": name, "args": args, "server": None},
+    }
+    try:
+        r = httpx.post(
+            f"{s.url}/v1/govern",
+            headers={"Authorization": f"Bearer {s.require_agent_key()}"},
+            json=behavior, timeout=30,
+        )
+    except Exception as e:
+        return "block", {"reason": f"governance_unavailable: {type(e).__name__}"}
+    if r.status_code >= 400:
+        return "block", {"reason": f"governance_unavailable: HTTP {r.status_code}"}
+    d = r.json()
+    if d.get("outcome") == "block":
+        return "block", {"reason": d.get("reason") or "blocked"}
+    for ob in d.get("obligations") or []:
+        if ob.get("type") == "require_approval":
+            return "approval", {"tier": ob.get("tier", "authenticated"),
+                                "reason": ob.get("reason") or "approval required"}
+    return "allow", {}
+
+
+def _run_tool(name: str, args: dict) -> dict:
+    try:
+        return dispatch(name, args)
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
 def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
     client = OpenAI(**build_client_kwargs(version, s))
     schemas, _ = tools_for_version(version)
+    session_id = f"apdemo-v{version}-{uuid.uuid4().hex[:8]}"
     messages = [
         {"role": "system", "content":
          "You are an Accounts Payable assistant. Use tools when needed."},
@@ -31,9 +86,6 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
             resp = client.chat.completions.create(
                 model=s.model, messages=messages, tools=schemas or None)
         except Exception as e:
-            # NOTE: the exact wire shape of a TapPass gateway block/redaction/approval
-            # on /v1/chat/completions is confirmed in the live verification task; until
-            # then, surface the real error instead of calling everything "governance".
             status = getattr(e, "status_code", None)
             body = getattr(getattr(e, "response", None), "text", None)
             if status is not None:
@@ -47,12 +99,32 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
             return
         messages.append(msg.model_dump(exclude_none=True))
         for tc in msg.tool_calls:
+            name = tc.function.name
             args = json.loads(tc.function.arguments or "{}")
-            print(f"[TOOL] {tc.function.name}({args})")
-            try:
-                result = dispatch(tc.function.name, args)
-            except Exception as e:
-                result = {"error": f"{type(e).__name__}: {e}"}
+
+            # v1+ : govern the tool call BEFORE running it.
+            if version >= 1:
+                decision, detail = govern_tool_call(s, name, args, session_id)
+                if decision == "block":
+                    print(f"[BLOCKED] {name}({args}) — {detail['reason']}")
+                    result = {"governed": "blocked", "reason": detail["reason"]}
+                    messages.append({"role": "tool", "tool_call_id": tc.id,
+                                     "content": json.dumps(result)})
+                    continue
+                if decision == "approval":
+                    print(f"[APPROVAL REQUIRED] {name}({args}) — "
+                          f"{detail['tier']} approval: {detail['reason']}")
+                    print("  ↳ agent halts; a reviewer approves in the TapPass "
+                          "dashboard before this runs.")
+                    result = {"governed": "approval_required",
+                              "tier": detail["tier"], "reason": detail["reason"]}
+                    messages.append({"role": "tool", "tool_call_id": tc.id,
+                                     "content": json.dumps(result)})
+                    continue
+                print(f"[GOVERNED ✓] {name} allowed")
+
+            print(f"[TOOL] {name}({args})")
+            result = _run_tool(name, args)
             messages.append({"role": "tool", "tool_call_id": tc.id,
                              "content": json.dumps(result)})
     print("\n[done: step budget reached]")

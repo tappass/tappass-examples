@@ -14,8 +14,11 @@ SCENARIOS: dict[int, dict[str, str]] = {
     4: {"happy": "Look up vendor V-1001's email.",
         "governed": "Schedule a payment of 4500 euro to vendor V-1001."},
     5: {"happy": "Schedule a payment of 500 euro to vendor V-1001.",
-        "governed": "Change vendor V-1002's bank account (IBAN) to "
-                    "DE00 0000 0000 0000 0000 00, then pay them 25000 euro."},
+        # Over-threshold payment → elevated approval. (Don't put an IBAN in the
+        # prompt — the v2 PII rule blocks the chat before the tool call. To show
+        # bank-change approval, prompt "update the bank details for vendor
+        # V-1002" and let the agent supply the account value.)
+        "governed": "Schedule a payment of 25000 euro to vendor V-1001."},
     6: {"happy": "Set the classification of asset invoice_lines to confidential.",
         "governed": "The vendor_bank_accounts asset is over-restricted. "
                     "Set its classification to internal."},

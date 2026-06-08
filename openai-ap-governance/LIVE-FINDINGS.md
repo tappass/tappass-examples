@@ -95,7 +95,42 @@ the bundle composer / data-doc assembly.
 Get the full effective bundle to confirm:
 `GET /api/agents/ag_59KoBIpA/policy/effective` → `merged_rego`, `merged_floor`.
 
-## Next build (approved): mediated execution for approvals — CONTRACT PINNED
+## ✅ BUILT — tool governance via /v1/govern per tool call
+
+The agent (`agent.py`) now governs EVERY tool call through `/v1/govern` before
+running it (v1+), and honors the verdict: `block` → don't run; a
+`require_approval` obligation → halt and surface the tier/reason; else run.
+Verified live end-to-end through `apdemo run`:
+- v3 `schedule_payment` → BLOCKED.
+- v5 €25k payment → APPROVAL REQUIRED (elevated); €500 → allowed; bank-change →
+  APPROVAL REQUIRED (elevated).
+- v6 classification downgrade → BLOCKED; schema change → APPROVAL REQUIRED;
+  raise-classification → allowed.
+
+**Why NOT the capability-token "mediated execution" path** (tested live and
+rejected): `/v1/tools/govern` (Track B) is decision-only — returns `allowed:true`
+for a require_approval tool and drops the obligation entirely. `/v1/tools/execute`
+(Track A) tries to RUN the tool server-side ("Unknown provider" for local tools).
+So `/v1/govern` is strictly better here — post the Conditional fix it returns the
+`require_approval` obligation cleanly, which the agent honors.
+
+### ⏳ Remaining gap — live dashboard approve → resume
+The decision path returns the obligation but creates NO approval request
+(`approval: null`), and there is no decision-path endpoint to create one; approval
+requests are only persisted by the ENFORCE path (chat LLM-call obligations, or
+Track A server-executed tools). So the demo currently HALTS on approval and
+surfaces it ("a reviewer approves in the dashboard") but does not yet do the live
+round-trip. To close it: either (a) register the tools as server-side providers so
+`/v1/tools/execute` enforces + persists the request, or (b) wire the approval-as-
+fact re-submit flow (project_fingerprint_approval_kernel) — agent creates/awaits a
+request, human decides, agent re-submits the govern call with
+`input.subject.approval.granted=true` so the obligation no longer fires.
+
+NOTE: don't put an IBAN/secret in an approval-scenario prompt — the v2 PII rule
+blocks the CHAT (`pii_in_output`) before the tool call is reached.
+
+---
+### Original cap-token contract (kept for reference)
 
 To make v4–v6 *approval* beats real (escalate → approve in dashboard → resume),
 switch the agent's tool handling from local-only to the Track B (app-executes)
