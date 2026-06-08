@@ -76,14 +76,33 @@ the bundle composer / data-doc assembly.
 Get the full effective bundle to confirm:
 `GET /api/agents/ag_59KoBIpA/policy/effective` → `merged_rego`, `merged_floor`.
 
-## Next build (approved): mediated execution for approvals
+## Next build (approved): mediated execution for approvals — CONTRACT PINNED
 
-To make v4–v6 *approval* beats real (escalate → approve in dashboard → resume):
-1. Call the gateway chat via httpx (not the OpenAI client) to capture the
-   `capability_token` from the response when tool calls are present.
-2. Per tool call: `POST /v1/tools/govern` `{capability_token, tool_call_id, name,
-   arguments}` → allowed / blocked / escalate.
-3. On escalate: poll `/v1/me/approvals/{request_id}/wait`; on approve, run the
-   tool locally and continue. On block: feed a blocked tool-result back.
+To make v4–v6 *approval* beats real (escalate → approve in dashboard → resume),
+switch the agent's tool handling from local-only to the Track B (app-executes)
+mediated flow:
+
+1. **Capture the capability token.** Call the gateway chat via httpx (the raw
+   OpenAI client hides it). The token is in the response JSON at
+   `resp["tappass"]["capability_token"]` whenever the assistant message has
+   tool calls. (`adapters/openai.py:139` sets `resp["tappass"]["capability_token"]`.)
+2. **Govern each tool call (Track B).**
+   `POST /v1/tools/govern` (Bearer = agent key) with
+   `{capability_token, tool_call_id, name, arguments}`.
+   - allowed → `{"allowed": true, ...}` (may return approved `arguments` for
+     withheld args) → run the tool locally, feed the result back.
+   - blocked → `{"allowed": false, "blocked_by": <step>, "reason": ...}` (HTTP
+     200 for govern; execute returns 403) → feed a blocked tool-result back.
+   - approval → **TO VERIFY LIVE**: confirm whether `mode="govern"` enforces the
+     `require_approval` obligation (returns escalate / not-allowed-pending) or
+     only `mode="execute"` does. `governed_tool(mode=...)` is in
+     `surfaces/gateway/service.py`. If govern doesn't escalate, use
+     `POST /v1/tools/execute` (Track A) — but that path expects TapPass to run
+     the tool, which doesn't fit local Python tools; needs checking.
+3. **Approval resume.** On escalate, poll `/v1/me/approvals/{request_id}/wait`
+   (a human approves in the dashboard), then continue.
+
+Request models (`adapters/openai.py`): `ToolGovernRequest` /
+`ToolExecRequest` = `{capability_token, tool_call_id, name, arguments}`.
 
 v5/v6 also depend on the Conditional fix above.
