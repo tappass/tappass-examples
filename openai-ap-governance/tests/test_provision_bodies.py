@@ -4,10 +4,11 @@ from apdemo.provision import (
 
 
 def test_onboard_body():
-    b = onboard_body(agent_id="ap-demo-agent", org_id="tappass-6ab653",
-                     owner_email="you@example.com")
+    b = onboard_body(agent_id="ap-demo-agent", owner_email="you@example.com")
     assert b["agent_id"] == "ap-demo-agent"
-    assert b["org_id"] == "tappass-6ab653"
+    # org_id is intentionally omitted so the server resolves the resource org
+    # from the PAT (the home org from /api/me can differ and cause a 403).
+    assert "org_id" not in b
     assert b["owner_email"] == "you@example.com"
     assert b["framework"] == "custom"
 
@@ -21,7 +22,7 @@ def test_policy_body():
 def test_version_body_carries_rules_and_note():
     b = version_body(3)
     assert b["change_note"].startswith("v3")
-    assert any(r["kind"] == "AllowTool" for r in b["rules"])
+    assert any(r["kind"] == "BlockTool" for r in b["rules"])
 
 
 def test_assignment_body_keys_on_agent_uuid():

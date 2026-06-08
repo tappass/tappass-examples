@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 
 from . import agent as agent_mod
@@ -19,9 +18,11 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="apdemo")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("setup", help="create agent + policy with 6 versions")
+    sub.add_parser("setup", help="create (or reuse) agent + a fresh policy")
 
-    a = sub.add_parser("activate", help="publish + assign policy version N (1..6)")
+    a = sub.add_parser(
+        "activate",
+        help="create+publish+assign policy posture N (1..6) — one forward step")
     a.add_argument("--version", type=int, required=True, choices=range(1, 7))
 
     r = sub.add_parser("run", help="run the agent at version N (0..6)")
@@ -42,21 +43,17 @@ def main(argv: list[str] | None = None) -> int:
             "TAPPASS_AGENT_KEY": out["agent_key"],
             "TAPPASS_AGENT_UUID": out["agent_uuid"],
             "TAPPASS_POLICY_ID": out["policy_id"],
-            "TAPPASS_VERSION_MAP": json.dumps(out["version_map"]),
         }))
+        print(f"# agent + policy '{out['policy_name']}' live in org {out['org_id']}")
         return 0
 
     if args.cmd == "activate":
         cp = ControlPlane(s)
         if not s.policy_id or not s.agent_uuid:
             raise SystemExit("Run `apdemo setup` and fill .env first.")
-        server_no = s.version_map.get(args.version, args.version)
-        if not s.version_map:
-            print("WARNING: TAPPASS_VERSION_MAP not set; assuming server version_no == demo version. "
-                  "Re-run `apdemo setup` and copy ALL printed vars into .env to be safe.")
-        cp.publish(s.policy_id, server_no)
-        cp.assign(s.policy_id, s.agent_uuid)
-        print(f"Activated + assigned policy version {args.version}.")
+        version_no = cp.activate(s.policy_id, args.version, s.agent_uuid)
+        print(f"Governance posture v{args.version} is now active "
+              f"(policy version_no={version_no}) and assigned to the agent.")
         return 0
 
     if args.cmd == "run":
