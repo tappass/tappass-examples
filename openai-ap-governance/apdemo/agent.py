@@ -21,13 +21,23 @@ from .config import Settings
 from .tools import dispatch, tools_for_version
 
 
-def build_client_kwargs(version: int, s: Settings) -> dict:
-    """v0 talks to OpenAI directly; v1+ route through the TapPass gateway."""
+def build_client_kwargs(version: int, s: Settings,
+                        session_id: str | None = None) -> dict:
+    """v0 talks to OpenAI directly; v1+ route through the TapPass gateway.
+
+    For v1+ we pin an ``X-Session-Id`` header so every gateway chat call in this
+    run correlates to ONE session (and the same id we send on the /v1/govern
+    tool calls) — otherwise each chat call lands in its own session and the
+    trace fragments.
+    """
     if version == 0:
         if not s.openai_api_key:
             raise SystemExit("v0 needs OPENAI_API_KEY (direct OpenAI).")
         return {"api_key": s.openai_api_key}
-    return {"base_url": f"{s.url}/v1", "api_key": s.require_agent_key()}
+    kwargs = {"base_url": f"{s.url}/v1", "api_key": s.require_agent_key()}
+    if session_id:
+        kwargs["default_headers"] = {"X-Session-Id": session_id}
+    return kwargs
 
 
 def govern_tool_call(s: Settings, name: str, args: dict, session_id: str) -> tuple[str, dict]:
@@ -73,9 +83,10 @@ def _run_tool(name: str, args: dict) -> dict:
 
 
 def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
-    client = OpenAI(**build_client_kwargs(version, s))
-    schemas, _ = tools_for_version(version)
     session_id = f"apdemo-v{version}-{uuid.uuid4().hex[:8]}"
+    client = OpenAI(**build_client_kwargs(version, s, session_id))
+    schemas, _ = tools_for_version(version)
+    print(f"# session: {session_id}")
     messages = [
         {"role": "system", "content":
          "You are an Accounts Payable assistant. Use tools when needed."},
