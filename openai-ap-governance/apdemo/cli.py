@@ -30,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--scenario", choices=["happy", "governed"], default="happy")
     r.add_argument("--prompt", default=None)
 
+    sub.add_parser("guide", help="interactive guided demo — press ENTER through v0→v6")
     sub.add_parser("status", help="show active policy + assignment")
     sub.add_parser("teardown", help="remove the demo agent + policy")
 
@@ -60,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
         prompt = args.prompt or prompt_for(args.version, args.scenario)
         print(f"# v{args.version} [{args.scenario}] prompt: {prompt}")
         agent_mod.run(args.version, prompt, s)
+        return 0
+
+    if args.cmd == "guide":
+        from .guide import run_guide
+        run_guide(s)
         return 0
 
     if args.cmd == "status":

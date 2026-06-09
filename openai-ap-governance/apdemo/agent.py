@@ -82,7 +82,8 @@ def _run_tool(name: str, args: dict) -> dict:
         return {"error": f"{type(e).__name__}: {e}"}
 
 
-def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
+def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> str:
+    """Run one agent interaction. Returns the session_id (for the trace URL)."""
     session_id = f"apdemo-v{version}-{uuid.uuid4().hex[:8]}"
     client = OpenAI(**build_client_kwargs(version, s, session_id))
     schemas, _ = tools_for_version(version)
@@ -103,11 +104,11 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
                 print(f"\n[GATEWAY {status}] {body or e}")
             else:
                 print(f"\n[ERROR] {type(e).__name__}: {e}")
-            return
+            return session_id
         msg = resp.choices[0].message
         if not msg.tool_calls:
             print(f"\n[ASSISTANT] {msg.content}")
-            return
+            return session_id
         messages.append(msg.model_dump(exclude_none=True))
         for tc in msg.tool_calls:
             name = tc.function.name
@@ -139,3 +140,4 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> None:
             messages.append({"role": "tool", "tool_call_id": tc.id,
                              "content": json.dumps(result)})
     print("\n[done: step budget reached]")
+    return session_id

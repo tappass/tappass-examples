@@ -11,7 +11,24 @@ editing your **Collibra-style data catalog**.
 
 ---
 
-## The showcase (the way to present it)
+## Quickest way to present: the guided walkthrough
+
+```bash
+apdemo guide
+```
+
+An interactive, press-ENTER-through tour of v0→v6. Each step shows the narration,
+**what changes in TapPass** (+ the policy URL), waits for you to hit ENTER, applies
+the governance change, runs the agent, prints the clear governance verdict
+(`[GOVERNED ✓]` / `[BLOCKED]` / `[APPROVAL REQUIRED]`), and links the **governed
+trace** in the dashboard. Keep `app.tappass.ai` open alongside and just press
+ENTER. (Run `apdemo setup` first for a clean policy version history.)
+
+The rest of this doc is the manual version of the same flow + the talk track.
+
+---
+
+## The showcase (manual, with full talk track)
 
 Set up **two windows side by side**:
 1. A terminal in this folder running `apdemo`.
