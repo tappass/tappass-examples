@@ -30,7 +30,9 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--scenario", choices=["happy", "governed"], default="happy")
     r.add_argument("--prompt", default=None)
 
-    sub.add_parser("guide", help="interactive guided demo — press ENTER through v0→v6")
+    g = sub.add_parser("guide", help="interactive guided demo — press ENTER through v0→v6")
+    g.add_argument("--fresh", action="store_true",
+                   help="reset to a brand-new policy first (clean v1→v6 history; re-runnable)")
     sub.add_parser("status", help="show active policy + assignment")
     sub.add_parser("teardown", help="remove the demo agent + policy")
 
@@ -65,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "guide":
         from .guide import run_guide
-        run_guide(s)
+        run_guide(s, fresh=args.fresh)
         return 0
 
     if args.cmd == "status":

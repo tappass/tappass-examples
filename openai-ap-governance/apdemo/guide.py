@@ -62,11 +62,23 @@ def _pause(prompt: str = "  ↵  press ENTER to continue") -> None:
         sys.exit(0)
 
 
-def run_guide(s: Settings) -> None:
+def run_guide(s: Settings, fresh: bool = False) -> None:
     if not s.policy_id or not s.agent_uuid:
         raise SystemExit("Run `apdemo setup` and fill .env first.")
     cp = ControlPlane(s)
-    policy_url = f"{s.url}/app/policies/{s.policy_id}"
+
+    policy_id = s.policy_id
+    if fresh:
+        # Re-runnable from a pristine starting point: neutralise the current
+        # policy (so its assignment stops governing the agent), then mint a
+        # brand-new policy whose version history starts clean at v1.
+        print(f"{DIM}Resetting to a fresh policy…{RESET}")
+        cp.neutralize(s.policy_id)
+        org = cp.agent_org(s.agent_id) or ""
+        policy_id, policy_name = cp.create_policy("AP Demo Policy", org_id=org)
+        print(f"{GREEN}✓ fresh policy '{policy_name}' ({policy_id}){RESET}")
+
+    policy_url = f"{s.url}/app/policies/{policy_id}"
     agent_url = f"{s.url}/app/agents/{s.agent_uuid}"
 
     print(f"\n{BOLD}TapPass · Accounts-Payable agent governance demo{RESET}")
@@ -92,7 +104,7 @@ def run_guide(s: Settings) -> None:
         _pause()
 
         if v >= 1:
-            version_no = cp.activate(s.policy_id, v, s.agent_uuid)
+            version_no = cp.activate(policy_id, v, s.agent_uuid)
             print(f"  {GREEN}✓ policy v{v} is now active "
                   f"(version {version_no}) and assigned{RESET}")
 
@@ -106,4 +118,8 @@ def run_guide(s: Settings) -> None:
     print(f"\n{CYAN}{RULE}{RESET}")
     print(f"{BOLD}That's the ladder.{RESET} Six policy versions, activated live — "
           "and the agent code never changed.")
-    print(f"  Policy version history: {policy_url}\n")
+    print(f"  Policy version history: {policy_url}")
+    if fresh and policy_id != s.policy_id:
+        print(f"\n  {DIM}This run used a fresh policy. To keep it as the default,"
+              f" set in .env:{RESET}\n  TAPPASS_POLICY_ID={policy_id}")
+    print()

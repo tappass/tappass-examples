@@ -154,6 +154,32 @@ class ControlPlane:
         self.assign(policy_id, agent_uuid)
         return version_no
 
+    def pull_back(self, policy_id: str, version_no: int) -> dict:
+        """Revert an ACTIVE version back to draft (so it stops governing)."""
+        return self._post(
+            f"/api/v2/policies/{policy_id}/versions/{version_no}/pull-back")
+
+    def active_version_no(self, policy_id: str) -> int | None:
+        for v in self._get(f"/api/v2/policies/{policy_id}/versions").get("data", []):
+            if v.get("status") == "active":
+                return v.get("version_no")
+        return None
+
+    def agent_org(self, agent_id: str) -> str | None:
+        rec = self._find_agent(agent_id)
+        return rec.get("org_id") if rec else None
+
+    def neutralize(self, policy_id: str) -> None:
+        """Stop a policy from governing the agent: pull its active version back to
+        draft so its (still-present) assignment no longer composes. Used when
+        switching to a fresh policy so the old one doesn't stack on top."""
+        n = self.active_version_no(policy_id)
+        if n is not None:
+            try:
+                self.pull_back(policy_id, n)
+            except SystemExit:
+                pass  # already draft / nothing to pull back — fine
+
 
 def setup(settings: Settings, agent_id: str = "ap-demo-agent",
           policy_name: str = "AP Demo Policy") -> dict:

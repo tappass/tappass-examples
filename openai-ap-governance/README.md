@@ -22,7 +22,17 @@ An interactive, press-ENTER-through tour of v0→v6. Each step shows the narrati
 the governance change, runs the agent, prints the clear governance verdict
 (`[GOVERNED ✓]` / `[BLOCKED]` / `[APPROVAL REQUIRED]`), and links the **governed
 trace** in the dashboard. Keep `app.tappass.ai` open alongside and just press
-ENTER. (Run `apdemo setup` first for a clean policy version history.)
+ENTER.
+
+**Re-runnable from a clean slate:**
+```bash
+apdemo guide --fresh
+```
+`--fresh` resets to a **brand-new policy** for the run — it neutralizes the
+current policy (so it stops governing the agent) and mints a fresh one whose
+version history starts cleanly at **v1**. Run it before every demo for a pristine
+v1→v6 history. (Plain `apdemo guide` also re-runs correctly — it re-walks the
+ladder on the existing policy — but the version numbers keep climbing across runs.)
 
 The rest of this doc is the manual version of the same flow + the talk track.
 
