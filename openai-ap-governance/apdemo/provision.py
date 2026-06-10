@@ -132,9 +132,31 @@ class ControlPlane:
                 continue
             raise SystemExit(f"POST /api/v2/policies -> {r.status_code}: {r.text}")
 
+    def _open_draft_no(self, policy_id: str) -> int | None:
+        for v in self._get(f"/api/v2/policies/{policy_id}/versions").get("data", []):
+            if v.get("status") == "draft":
+                return v.get("version_no")
+        return None
+
     def create_version(self, policy_id: str, n: int) -> int:
-        resp = self._post(f"/api/v2/policies/{policy_id}/versions", version_body(n))
-        return resp["version_no"]
+        # A policy allows only ONE open draft (ADR 0014). If one already exists
+        # (e.g. left by a prior neutralise/pull-back), edit it in place rather
+        # than 409-ing — keeps activate() robust + re-runnable.
+        body = version_body(n)
+        r = self._http.post(f"/api/v2/policies/{policy_id}/versions", json=body)
+        if r.status_code == 409:
+            draft_no = self._open_draft_no(policy_id)
+            if draft_no is not None:
+                pr = self._http.put(
+                    f"/api/v2/policies/{policy_id}/versions/{draft_no}/rules",
+                    json=body)
+                if pr.status_code < 400:
+                    return draft_no
+        if r.status_code >= 400:
+            raise SystemExit(
+                f"POST /api/v2/policies/{policy_id}/versions -> "
+                f"{r.status_code}: {r.text}")
+        return r.json()["version_no"]
 
     def publish(self, policy_id: str, version_no: int) -> dict:
         return self._post(
