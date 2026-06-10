@@ -18,7 +18,7 @@ import httpx
 from openai import OpenAI
 
 from .config import Settings
-from .tools import dispatch, tools_for_version
+from .tools import dispatch, tool_description, tools_for_version
 
 
 def build_client_kwargs(version: int, s: Settings,
@@ -53,7 +53,10 @@ def govern_tool_call(s: Settings, name: str, args: dict, session_id: str) -> tup
         "agent_id": s.agent_id,
         "session_id": session_id,
         "behavior_id": uuid.uuid4().hex,
-        "payload": {"tool": name, "args": args, "server": None},
+        # server=None → the trace shows this as a local (in-process) tool;
+        # description = the schema text the model reasoned over to pick the tool.
+        "payload": {"tool": name, "args": args, "server": None,
+                    "description": tool_description(name)},
     }
     try:
         r = httpx.post(

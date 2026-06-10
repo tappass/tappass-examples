@@ -111,3 +111,12 @@ def dispatch(name: str, args: dict) -> dict:
     if entry is None:
         return {"error": f"unknown tool: {name}"}
     return entry[2](args)
+
+
+def tool_description(name: str) -> str:
+    """The tool's schema description — the text the model reasoned over to choose
+    it. Sent on the govern call so the trace can show what the tool does."""
+    entry = _REGISTRY.get(name)
+    if entry is None:
+        return ""
+    return entry[1].get("function", {}).get("description", "")
