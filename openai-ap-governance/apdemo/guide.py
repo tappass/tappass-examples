@@ -40,12 +40,14 @@ STEPS = [
     {"version": 4, "title": "v4 — human in the loop",
      "why": "Payments are allowed, but each one requires human approval.",
      "scenario": "governed",
-     "watch": "The agent halts and asks for sign-off instead of paying."},
+     "watch": "The agent pauses for sign-off — you approve it (ENTER) and it "
+              "proceeds; the approval + execution are audited."},
     {"version": 5, "title": "v5 — context-aware (the fraud beat)",
      "why": "Small payments flow; large ones need elevated approval; vendor "
             "bank-account changes ALWAYS need approval.",
      "scenario": "governed",
-     "watch": "A €25k payment escalates — the classic AP-fraud guardrail."},
+     "watch": "A €25k payment escalates for sign-off — approve it (ENTER) to "
+              "resume. The classic AP-fraud guardrail."},
     {"version": 6, "title": "v6 — govern the agent that touches your catalog",
      "why": "The same kernel now governs an agent editing your Collibra-style "
             "data catalog.",
@@ -60,6 +62,28 @@ def _pause(prompt: str = "  ↵  press ENTER to continue") -> None:
     except (EOFError, KeyboardInterrupt):
         print()
         sys.exit(0)
+
+
+def _approve(name: str, args: dict, detail: dict) -> bool:
+    """Human-in-the-loop sign-off, invoked when TapPass escalates a tool call.
+
+    You are the reviewer TapPass escalated to — approving here (ENTER) is the
+    in-script equivalent of approving in the dashboard. Ctrl-C denies.
+    """
+    tier = str(detail.get("tier", "elevated")).upper()
+    reason = detail.get("reason", "approval required")
+    arg_str = ", ".join(f"{k}={v}" for k, v in args.items())
+    print(f"\n  {YELLOW}⏸  {tier} APPROVAL REQUIRED{RESET}")
+    print(f"     {name}({arg_str})")
+    print(f"     {DIM}{reason}{RESET}")
+    try:
+        input(f"  {YELLOW}↵  press ENTER to approve as reviewer{RESET}"
+              f"{DIM}  (Ctrl-C to deny){RESET}")
+    except (EOFError, KeyboardInterrupt):
+        print(f"\n  {DIM}✗ denied — the action stays blocked.{RESET}")
+        return False
+    print(f"  {GREEN}✓ approved — resuming the action{RESET}")
+    return True
 
 
 def run_guide(s: Settings, fresh: bool = False) -> None:
@@ -109,7 +133,7 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
                   f"(version {version_no}) and assigned{RESET}")
 
         print()
-        sid = agent_mod.run(v, prompt, s)
+        sid = agent_mod.run(v, prompt, s, approve_cb=_approve)
         if v >= 1 and sid:
             print(f"\n  {CYAN}→ open the governed trace:{RESET} "
                   f"{s.url}/app/sessions/{sid}")

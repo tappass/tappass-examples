@@ -32,12 +32,15 @@ def test_block_outcome(monkeypatch):
 
 
 def test_require_approval_obligation(monkeypatch):
-    _patch(monkeypatch, 200, {"outcome": "allow", "obligations": [
-        {"type": "require_approval", "tier": "elevated", "reason": "needs sign-off"}]})
+    _patch(monkeypatch, 200, {"pipeline_id": "run_abc", "outcome": "allow",
+        "obligations": [
+            {"type": "require_approval", "tier": "elevated", "reason": "needs sign-off"}]})
     decision, detail = agent_mod.govern_tool_call(_settings(), "pay", {}, "s")
     assert decision == "approval"
     assert detail["tier"] == "elevated"
     assert detail["reason"] == "needs sign-off"
+    # approval detail carries pipeline_id so an approved action can be reported
+    assert detail["pipeline_id"] == "run_abc"
 
 
 def test_allow(monkeypatch):

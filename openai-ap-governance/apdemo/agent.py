@@ -75,7 +75,8 @@ def govern_tool_call(s: Settings, name: str, args: dict, session_id: str) -> tup
     for ob in d.get("obligations") or []:
         if ob.get("type") == "require_approval":
             return "approval", {"tier": ob.get("tier", "authenticated"),
-                                "reason": ob.get("reason") or "approval required"}
+                                "reason": ob.get("reason") or "approval required",
+                                "pipeline_id": pipeline_id}
     return "allow", {"pipeline_id": pipeline_id}
 
 
@@ -106,8 +107,15 @@ def _run_tool(name: str, args: dict) -> dict:
         return {"error": f"{type(e).__name__}: {e}"}
 
 
-def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> str:
-    """Run one agent interaction. Returns the session_id (for the trace URL)."""
+def run(version: int, prompt: str, s: Settings, max_steps: int = 6,
+        approve_cb=None) -> str:
+    """Run one agent interaction. Returns the session_id (for the trace URL).
+
+    ``approve_cb(name, args, detail) -> bool`` is an optional human-in-the-loop
+    hook: when the kernel escalates a tool call (require_approval), it's called
+    so a reviewer can sign off. Return True to approve (the action then proceeds
+    and is reported); False/None or no callback → the action halts (default).
+    """
     session_id = f"apdemo-v{version}-{uuid.uuid4().hex[:8]}"
     client = OpenAI(**build_client_kwargs(version, s, session_id))
     schemas, _ = tools_for_version(version)
@@ -151,14 +159,19 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> str:
                 if decision == "approval":
                     print(f"[APPROVAL REQUIRED] {name}({args}) — "
                           f"{detail['tier']} approval: {detail['reason']}")
-                    print("  ↳ agent halts; a reviewer approves in the TapPass "
-                          "dashboard before this runs.")
-                    result = {"governed": "approval_required",
-                              "tier": detail["tier"], "reason": detail["reason"]}
-                    messages.append({"role": "tool", "tool_call_id": tc.id,
-                                     "content": json.dumps(result)})
-                    continue
-                print(f"[GOVERNED ✓] {name} allowed")
+                    approved = bool(approve_cb and approve_cb(name, args, detail))
+                    if not approved:
+                        print("  ↳ agent halts; a reviewer approves in the TapPass "
+                              "dashboard before this runs.")
+                        result = {"governed": "approval_required",
+                                  "tier": detail["tier"], "reason": detail["reason"]}
+                        messages.append({"role": "tool", "tool_call_id": tc.id,
+                                         "content": json.dumps(result)})
+                        continue
+                    print(f"  ↳ [APPROVED ✓] reviewer signed off — resuming {name}")
+                    # fall through to run the approved action
+                else:
+                    print(f"[GOVERNED ✓] {name} allowed")
 
             print(f"[TOOL] {name}({args})")
             result = _run_tool(name, args)
