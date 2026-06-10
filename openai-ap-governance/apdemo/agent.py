@@ -91,7 +91,8 @@ def report_tool_result(s: Settings, pipeline_id: str, session_id: str,
             headers={"Authorization": f"Bearer {s.require_agent_key()}"},
             json={"pipeline_id": pipeline_id, "agent_id": s.agent_id,
                   "session_id": session_id,
-                  "output_text": json.dumps(result), "ok": True},
+                  "output_text": json.dumps(result),
+                  "ok": "error" not in result},
             timeout=15,
         )
     except Exception:

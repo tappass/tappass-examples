@@ -145,13 +145,18 @@ class ControlPlane:
         body = version_body(n)
         r = self._http.post(f"/api/v2/policies/{policy_id}/versions", json=body)
         if r.status_code == 409:
+            # edit the existing open draft in place; surface the PUT's own error
+            # (not the POST 409) if that fails, so the operator sees the real cause.
             draft_no = self._open_draft_no(policy_id)
-            if draft_no is not None:
-                pr = self._http.put(
-                    f"/api/v2/policies/{policy_id}/versions/{draft_no}/rules",
-                    json=body)
-                if pr.status_code < 400:
-                    return draft_no
+            if draft_no is None:
+                raise SystemExit(
+                    f"policy {policy_id} reports an open draft but none was found")
+            pr = self._http.put(
+                f"/api/v2/policies/{policy_id}/versions/{draft_no}/rules", json=body)
+            if pr.status_code >= 400:
+                raise SystemExit(
+                    f"PUT versions/{draft_no}/rules -> {pr.status_code}: {pr.text}")
+            return draft_no
         if r.status_code >= 400:
             raise SystemExit(
                 f"POST /api/v2/policies/{policy_id}/versions -> "
