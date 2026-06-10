@@ -69,13 +69,33 @@ def govern_tool_call(s: Settings, name: str, args: dict, session_id: str) -> tup
     if r.status_code >= 400:
         return "block", {"reason": f"governance_unavailable: HTTP {r.status_code}"}
     d = r.json()
+    pipeline_id = d.get("pipeline_id") or ""
     if d.get("outcome") == "block":
         return "block", {"reason": d.get("reason") or "blocked"}
     for ob in d.get("obligations") or []:
         if ob.get("type") == "require_approval":
             return "approval", {"tier": ob.get("tier", "authenticated"),
                                 "reason": ob.get("reason") or "approval required"}
-    return "allow", {}
+    return "allow", {"pipeline_id": pipeline_id}
+
+
+def report_tool_result(s: Settings, pipeline_id: str, session_id: str,
+                       result: dict) -> None:
+    """Report the tool's result back to TapPass (correlated by pipeline_id) so
+    the session trace shows the execution, not just the decision."""
+    if not pipeline_id:
+        return
+    try:
+        httpx.post(
+            f"{s.url}/v1/govern/execution",
+            headers={"Authorization": f"Bearer {s.require_agent_key()}"},
+            json={"pipeline_id": pipeline_id, "agent_id": s.agent_id,
+                  "session_id": session_id,
+                  "output_text": json.dumps(result), "ok": True},
+            timeout=15,
+        )
+    except Exception:
+        pass  # telemetry only — never break the run on a report failure
 
 
 def _run_tool(name: str, args: dict) -> dict:
@@ -116,6 +136,7 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> str:
         for tc in msg.tool_calls:
             name = tc.function.name
             args = json.loads(tc.function.arguments or "{}")
+            detail: dict = {}
 
             # v1+ : govern the tool call BEFORE running it.
             if version >= 1:
@@ -140,6 +161,9 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6) -> str:
 
             print(f"[TOOL] {name}({args})")
             result = _run_tool(name, args)
+            if version >= 1:
+                report_tool_result(s, detail.get("pipeline_id", ""),
+                                   session_id, result)
             messages.append({"role": "tool", "tool_call_id": tc.id,
                              "content": json.dumps(result)})
     print("\n[done: step budget reached]")
