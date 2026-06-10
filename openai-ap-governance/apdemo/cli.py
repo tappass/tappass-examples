@@ -27,7 +27,8 @@ def main(argv: list[str] | None = None) -> int:
 
     r = sub.add_parser("run", help="run the agent at version N (0..6)")
     r.add_argument("--version", type=int, required=True, choices=range(0, 7))
-    r.add_argument("--scenario", choices=["happy", "governed"], default="happy")
+    r.add_argument("--scenario", choices=["happy", "governed", "long"],
+                   default="happy")
     r.add_argument("--prompt", default=None)
 
     g = sub.add_parser("guide", help="interactive guided demo — press ENTER through v0→v6")
@@ -62,7 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "run":
         prompt = args.prompt or prompt_for(args.version, args.scenario)
         print(f"# v{args.version} [{args.scenario}] prompt: {prompt}")
-        agent_mod.run(args.version, prompt, s)
+        # The long scenario needs a bigger step budget (many tool calls).
+        max_steps = 16 if args.scenario == "long" else 6
+        agent_mod.run(args.version, prompt, s, max_steps=max_steps)
         return 0
 
     if args.cmd == "guide":
