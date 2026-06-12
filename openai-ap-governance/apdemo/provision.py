@@ -219,8 +219,10 @@ def setup(settings: Settings, agent_id: str = "ap-demo-agent",
     """
     cp = ControlPlane(settings)
     agent = cp.onboard_agent(agent_id)
-    policy_id, policy_name_final = cp.create_policy(
-        policy_name, org_id=agent["org_id"])
+    # Policy ops require the org SLUG; the agent record reports a UUID. Prefer
+    # the explicit TAPPASS_ORG slug, fall back to the agent's reported org.
+    org = settings.org or agent["org_id"]
+    policy_id, policy_name_final = cp.create_policy(policy_name, org_id=org)
     return {"agent_uuid": agent["agent_uuid"], "agent_key": agent["agent_key"],
-            "org_id": agent["org_id"], "policy_id": policy_id,
+            "org_id": org, "policy_id": policy_id,
             "policy_name": policy_name_final}

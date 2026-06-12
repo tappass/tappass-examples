@@ -17,6 +17,10 @@ class Settings:
     agent_uuid: str | None
     agent_id: str
     policy_id: str | None
+    # Org SLUG (e.g. "collibra-ba9ed2") for control-plane policy ops. The agent
+    # record reports the org as a UUID, but /api/v2/policies' cross-org check
+    # requires the slug — they must match the tenant, so carry it explicitly.
+    org: str | None
     model: str
     openai_api_key: str | None
     owner_email: str
@@ -30,6 +34,7 @@ class Settings:
             agent_uuid=os.getenv("TAPPASS_AGENT_UUID") or None,
             agent_id=os.getenv("TAPPASS_AGENT_ID", "ap-demo-agent"),
             policy_id=os.getenv("TAPPASS_POLICY_ID") or None,
+            org=os.getenv("TAPPASS_ORG") or None,
             model=os.getenv("TAPPASS_MODEL", "gpt-4o-mini"),
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,
             owner_email=os.getenv("DEMO_OWNER_EMAIL", "demo@example.com"),

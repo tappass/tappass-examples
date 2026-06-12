@@ -115,7 +115,8 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
         # brand-new policy whose version history starts clean at v1.
         print(f"{DIM}Resetting to a fresh policy…{RESET}")
         cp.neutralize(s.policy_id)
-        org = cp.agent_org(s.agent_id) or ""
+        # Policy ops need the org SLUG (TAPPASS_ORG); the agent reports a UUID.
+        org = s.org or cp.agent_org(s.agent_id) or ""
         policy_id, policy_name = cp.create_policy("AP Demo Policy", org_id=org)
         print(f"{GREEN}✓ fresh policy '{policy_name}' ({policy_id}){RESET}")
 
