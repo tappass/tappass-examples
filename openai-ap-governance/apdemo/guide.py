@@ -13,7 +13,7 @@ import httpx
 
 from . import agent as agent_mod
 from .config import Settings
-from .provision import ControlPlane
+from .provision import ControlPlane, _writeback_env
 from .rules import change_note
 from .scenarios import prompt_for
 
@@ -118,6 +118,8 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
         # Policy ops need the org SLUG (TAPPASS_ORG); the agent reports a UUID.
         org = s.org or cp.agent_org(s.agent_id) or ""
         policy_id, policy_name = cp.create_policy("AP Demo Policy", org_id=org)
+        # Persist the fresh policy so later runs REUSE it (clean + no new bloat).
+        _writeback_env({"TAPPASS_POLICY_ID": policy_id})
         print(f"{GREEN}✓ fresh policy '{policy_name}' ({policy_id}){RESET}")
 
     policy_url = f"{s.url}/app/policies/{policy_id}"

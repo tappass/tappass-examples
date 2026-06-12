@@ -22,6 +22,9 @@ Governance lifecycle facts that shape this client:
 """
 from __future__ import annotations
 
+import dataclasses
+import os
+
 import httpx
 
 from .config import Settings
@@ -196,6 +199,22 @@ class ControlPlane:
         rec = self._find_agent(agent_id)
         return rec.get("org_id") if rec else None
 
+    def live_agent(self, agent_id: str) -> dict | None:
+        """The agent's LIVE record (or None). Source of truth for agent_uuid —
+        which the platform may re-key across refactors, so never trust .env."""
+        return self._find_agent(agent_id)
+
+    def policy_exists(self, policy_id: str) -> bool:
+        return self._http.get(f"/api/v2/policies/{policy_id}").status_code < 400
+
+    def find_policy(self, org_slug: str, name: str) -> str | None:
+        """Id of the demo policy (exact name) in the org, or None. Lets the demo
+        REUSE one policy across runs instead of minting a new one each time."""
+        for p in self._get(f"/api/v2/policies?org_id={org_slug}").get("data", []):
+            if p.get("name") == name:
+                return p["id"]
+        return None
+
     def neutralize(self, policy_id: str) -> None:
         """Stop a policy from governing the agent: pull its active version back to
         draft so its (still-present) assignment no longer composes. Used when
@@ -226,3 +245,83 @@ def setup(settings: Settings, agent_id: str = "ap-demo-agent",
     return {"agent_uuid": agent["agent_uuid"], "agent_key": agent["agent_key"],
             "org_id": org, "policy_id": policy_id,
             "policy_name": policy_name_final}
+
+
+_ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+
+
+def _writeback_env(values: dict[str, str], path: str = _ENV_PATH) -> None:
+    """Persist resolved identifiers back to .env so the next run starts warm and
+    the file never drifts from reality. Best-effort; never fails the run."""
+    try:
+        lines = open(path).read().splitlines() if os.path.exists(path) else []
+        pending = dict(values)
+        out = []
+        for ln in lines:
+            key = ln.split("=", 1)[0] if "=" in ln else None
+            out.append(f"{key}={pending.pop(key)}" if key in pending else ln)
+        out += [f"{k}={v}" for k, v in pending.items()]
+        open(path, "w").write("\n".join(out) + "\n")
+    except OSError:
+        pass
+
+
+#: Dedicated, clean demo policy. A distinct name so the self-heal reuses ONE
+#: pristine policy and never picks up the bloated "AP Demo Policy (N)" leftovers.
+DEMO_POLICY_NAME = "Accounts Payable Demo"
+
+
+def ensure_live(settings: Settings, *, policy_name: str = DEMO_POLICY_NAME) -> Settings:
+    """Self-healing wiring — idempotent, re-runnable, restores + works every time.
+
+    Resolves LIVE identifiers from the platform (never trusts stale .env) and
+    provisions whatever is missing:
+      • agent: reuse the live agent_uuid; onboard if absent; re-mint the dev key
+        only when it's missing or the agent was re-keyed (old key is dead then).
+      • policy: reuse the existing demo policy (by name) or the configured one if
+        it still exists; create it if neither — so we don't mint a new policy
+        every run (avoids tenant bloat).
+    Returns a Settings carrying the live agent_uuid / agent_key / policy_id, and
+    writes them back to .env. Requires TAPPASS_ORG (the org slug) — no API maps
+    the agent's org UUID back to the slug policy ops need.
+    """
+    org = settings.org
+    if not org:
+        raise SystemExit(
+            "TAPPASS_ORG is required (the org slug, e.g. 'collibra-ba9ed2'). "
+            "Add it to .env — policy ops need the slug, not the agent's org UUID.")
+    cp = ControlPlane(settings)
+
+    rec = cp.live_agent(settings.agent_id)
+    if rec is None:
+        agent = cp.onboard_agent(settings.agent_id)
+        agent_uuid, agent_key = agent["agent_uuid"], agent["agent_key"]
+    else:
+        agent_uuid = rec["agent_uuid"]
+        if settings.agent_key and agent_uuid == settings.agent_uuid:
+            agent_key = settings.agent_key            # live + matching → reuse
+        else:
+            agent_key = cp._mint_key(agent_uuid)      # re-keyed / missing → mint
+
+    # Reuse the ONE dedicated clean policy by name (create it once). We do NOT
+    # trust the configured id — on this tenant it points at a bloated/broken
+    # legacy policy; the named lookup keeps the demo on a single pristine policy.
+    policy_id = cp.find_policy(org, policy_name)
+    if not policy_id:
+        policy_id, _ = cp.create_policy(policy_name, org_id=org)
+
+    # Re-point the policy's assignment at the LIVE agent uuid every run. Without
+    # this, a re-keyed agent leaves a stale assignment and publish/compose 422s
+    # ("agent not found") — the exact failure the bloated demo policy hit.
+    try:
+        cp.assign(policy_id, agent_uuid)
+    except SystemExit:
+        pass
+
+    live = dataclasses.replace(
+        settings, agent_uuid=agent_uuid, agent_key=agent_key, policy_id=policy_id)
+    _writeback_env({"TAPPASS_AGENT_UUID": agent_uuid,
+                    "TAPPASS_AGENT_KEY": agent_key,
+                    "TAPPASS_POLICY_ID": policy_id,
+                    "TAPPASS_ORG": org})
+    return live

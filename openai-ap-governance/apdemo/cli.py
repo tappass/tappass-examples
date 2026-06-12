@@ -6,7 +6,7 @@ import sys
 
 from . import agent as agent_mod
 from .config import Settings
-from .provision import ControlPlane, setup as provision_setup
+from .provision import ControlPlane, ensure_live, setup as provision_setup
 from .scenarios import prompt_for
 
 
@@ -52,15 +52,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "activate":
+        s = ensure_live(s)                       # self-heal: live agent + policy
         cp = ControlPlane(s)
-        if not s.policy_id or not s.agent_uuid:
-            raise SystemExit("Run `apdemo setup` and fill .env first.")
         version_no = cp.activate(s.policy_id, args.version, s.agent_uuid)
         print(f"Governance posture v{args.version} is now active "
               f"(policy version_no={version_no}) and assigned to the agent.")
         return 0
 
     if args.cmd == "run":
+        s = ensure_live(s)                       # self-heal before running
         prompt = args.prompt or prompt_for(args.version, args.scenario)
         print(f"# v{args.version} [{args.scenario}] prompt: {prompt}")
         # The long scenario needs a bigger step budget (many tool calls).
@@ -70,11 +70,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "guide":
         from .guide import run_guide
+        s = ensure_live(s)                       # self-heal so it restores + works every run
         run_guide(s, fresh=args.fresh)
         return 0
 
     if args.cmd == "status":
-        print(f"url={s.url} agent_uuid={s.agent_uuid} policy_id={s.policy_id}")
+        s = ensure_live(s)
+        print(f"url={s.url} agent_uuid={s.agent_uuid} policy_id={s.policy_id} org={s.org}")
         return 0
 
     if args.cmd == "teardown":
