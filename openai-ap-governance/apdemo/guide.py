@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import sys
 
+import httpx
+
 from . import agent as agent_mod
 from .config import Settings
 from .provision import ControlPlane
@@ -64,11 +66,13 @@ def _pause(prompt: str = "  ↵  press ENTER to continue") -> None:
         sys.exit(0)
 
 
-def _approve(name: str, args: dict, detail: dict) -> bool:
+def _approve(s: Settings, name: str, args: dict, detail: dict) -> bool:
     """Human-in-the-loop sign-off, invoked when TapPass escalates a tool call.
 
-    You are the reviewer TapPass escalated to — approving here (ENTER) is the
-    in-script equivalent of approving in the dashboard. Ctrl-C denies.
+    You are the reviewer TapPass escalated to. On ENTER we record a real
+    approval grant for the *exact* action (POST /v1/govern/approve, control-plane
+    PAT) — approval-as-fact: the kernel's ApprovalProducer then finds the grant
+    when the agent re-submits, and governance itself re-allows. Ctrl-C denies.
     """
     tier = str(detail.get("tier", "elevated")).upper()
     reason = detail.get("reason", "approval required")
@@ -82,7 +86,20 @@ def _approve(name: str, args: dict, detail: dict) -> bool:
     except (EOFError, KeyboardInterrupt):
         print(f"\n  {DIM}✗ denied — the action stays blocked.{RESET}")
         return False
-    print(f"  {GREEN}✓ approved — resuming the action{RESET}")
+    try:
+        r = httpx.post(
+            f"{s.url}/v1/govern/approve",
+            headers={"Authorization": f"Bearer {s.require_pat()}"},
+            json={"agent_id": s.agent_id, "tool": name, "args": args},
+            timeout=15,
+        )
+        if r.status_code >= 400:
+            print(f"  {DIM}✗ grant failed: HTTP {r.status_code} {r.text[:120]}{RESET}")
+            return False
+    except Exception as e:
+        print(f"  {DIM}✗ grant error: {type(e).__name__}: {e}{RESET}")
+        return False
+    print(f"  {GREEN}✓ approved — grant recorded; governance will re-allow on resubmit{RESET}")
     return True
 
 
@@ -133,7 +150,9 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
                   f"(version {version_no}) and assigned{RESET}")
 
         print()
-        sid = agent_mod.run(v, prompt, s, approve_cb=_approve)
+        sid = agent_mod.run(
+            v, prompt, s,
+            approve_cb=lambda n, a, d: _approve(s, n, a, d))
         if v >= 1 and sid:
             print(f"\n  {CYAN}→ open the governed trace:{RESET} "
                   f"{s.url}/app/sessions/{sid}")

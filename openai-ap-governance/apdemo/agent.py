@@ -161,15 +161,23 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6,
                           f"{detail['tier']} approval: {detail['reason']}")
                     approved = bool(approve_cb and approve_cb(name, args, detail))
                     if not approved:
-                        print("  ↳ agent halts; a reviewer approves in the TapPass "
-                              "dashboard before this runs.")
+                        print("  ↳ agent halts; a reviewer approves before this runs.")
                         result = {"governed": "approval_required",
                                   "tier": detail["tier"], "reason": detail["reason"]}
                         messages.append({"role": "tool", "tool_call_id": tc.id,
                                          "content": json.dumps(result)})
                         continue
-                    print(f"  ↳ [APPROVED ✓] reviewer signed off — resuming {name}")
-                    # fall through to run the approved action
+                    # Approval-as-fact resume: the reviewer granted the exact
+                    # action, so RE-SUBMIT to governance — the kernel re-evaluates
+                    # (the ApprovalProducer now finds the grant) and allows it.
+                    decision, detail = govern_tool_call(s, name, args, session_id)
+                    if decision != "allow":
+                        print(f"  ↳ governance still returns '{decision}' — not resuming")
+                        result = {"governed": "approval_required", "reason": detail.get("reason", "")}
+                        messages.append({"role": "tool", "tool_call_id": tc.id,
+                                         "content": json.dumps(result)})
+                        continue
+                    print(f"  ↳ [APPROVED ✓] re-governed → allow, resuming {name}")
                 else:
                     print(f"[GOVERNED ✓] {name} allowed")
 
