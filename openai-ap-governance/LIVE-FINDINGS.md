@@ -160,3 +160,48 @@ Request models (`adapters/openai.py`): `ToolGovernRequest` /
 `ToolExecRequest` = `{capability_token, tool_call_id, name, arguments}`.
 
 v5/v6 also depend on the Conditional fix above.
+
+## 2026-06-15 alignment spike (Task 1) — against app.tappass.ai
+
+Run with the new 9-rung `apdemo`. Three findings; two are blockers owned by the
+**deployed server**, not the demo code.
+
+### 1. Decision-only `/v1/govern` does NOT escalate (confirms original finding)
+A `require_approval` (`RequireApproval` kind) tool call returns
+`outcome="allow"` + a `require_approval` **obligation**, `approval: null`. No
+escalate, no persisted approval request on this path.
+
+### 2. SDK enforce wrapper therefore does NOT hold the tool
+`tappass.govern(mode="enforce")` only raises `GovernanceBlocked` on
+`outcome="block"`. Given finding #1 it returns the allow Decision and **runs the
+tool** (verified: `gp("V-1001",4500)` → `TOOL_RAN`). ⇒ approvals must be
+expressed as a **block-when-ungranted** Conditional (Path B), not `RequireApproval`.
+
+### 3. Approval-as-fact resume is BROKEN on the deployed server
+With a Conditional `block when (tool==schedule_payment AND
+subject.approval.granted != true)`:
+- before grant → `block "approval required"` ✓ (so `subject.approval.granted` IS
+  supplied as `false` — the producer runs)
+- `POST /v1/govern/approve {agent_id,tool,args}` → `200 {state:"approved",
+  fingerprint:fp_43b9…}` — a real grant is recorded ✓
+- **re-submit identical call → still `block "approval required"`** ✗
+- second re-submit → still block.
+⇒ The grant is recorded but **never consumed** on the `/v1/govern` path (fingerprint
+mismatch between the two endpoints, or the consume-wiring isn't in the deployed
+release). Net: the agent **cannot resume**. "Approval actually asks" ✓ (real block +
+real recorded grant, visible in the approvals list/audit) but "resume" ✗.
+
+### 4. v2 rule kinds: Conditional block WORKS, RedactToolArg BREAKS
+- `Conditional {when: request.tool_args.message match "(?i)(voldemort|enron)",
+  then: block}` → clean "hi" allow; "voldemort" → `block "the cow may not say that"`. ✓
+- `BlockToolArgMatch` (same `{tool,arg,pattern}` matcher shape) → works. ✓
+- **`RedactToolArg`** (same matcher shape, redact obligation) → **every** cowsay call
+  returns `block / policy_eval_failed` (hard Rego eval error, fail-closed). ✗ Deployed-
+  server bug specific to the `RedactToolArg` obligation rule.
+
+### Consequences for the build
+- v2 "block + redact flourish": the **block** half ships; the **redact** half
+  (`RedactToolArg`) cannot until the server is fixed.
+- Real **approve-and-resume** (requirement #2) is **not achievable** against the
+  current deployed server via `/v1/govern` — needs a server-side fix (consume the
+  grant on the decision path, or make the path escalate+persist).
