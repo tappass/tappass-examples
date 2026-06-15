@@ -13,7 +13,11 @@ from __future__ import annotations
 
 # v2 — govern the cow's words
 _BANNED_PATTERN = "(?i)(voldemort|enron)"            # banned names the cow may not say
-_REDACT_PATTERN = r"[\w.+-]+@[\w-]+\.[\w.-]+"        # scrub emails out of the message
+# Scrub emails out of the message. ASCII-only ON PURPOSE: a Unicode `\w` class
+# expands so far in regorus's regex engine that the compiled program exceeds its
+# 100 KB limit and the whole policy fails closed (`policy_eval_failed`). Keep
+# tool-arg regexes ASCII so they compile small.
+_REDACT_PATTERN = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+"
 # v3 — frequency
 _RATE_TOOL, _RATE_MAX, _RATE_WINDOW_S = "cowsay", 3, 120
 # v7 — payment threshold
