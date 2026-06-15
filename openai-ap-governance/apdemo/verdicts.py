@@ -26,9 +26,14 @@ def classify_error(message: str) -> tuple[str, str]:
 class VerdictHandler(BaseCallbackHandler):
     def __init__(self, governed: bool = True) -> None:
         self.governed = governed
+        # The last tool the agent attempted, as (name, args). Captured so the
+        # approve-and-resume loop can grant the EXACT action when the SDK halts
+        # it for approval (the GovernanceBlocked exception doesn't carry args).
+        self.last_tool: tuple[str, dict] | None = None
 
     def on_tool_start(self, serialized, input_str, **kwargs) -> None:
         name = (serialized or {}).get("name", "tool")
+        self.last_tool = (name, dict(kwargs.get("inputs") or {}))
         print(f"{DIM}[TOOL] {name}({input_str}){RESET}")
 
     def on_tool_end(self, output, **kwargs) -> None:

@@ -47,6 +47,31 @@ def _pii_rules(o: int) -> list[dict]:
     ]
 
 
+# Approval-as-fact gate: the leaf that holds ONLY while the action is NOT yet
+# approved. Combined into a Conditional `when` so the rule blocks until a grant
+# exists, then stops firing once the operator approves the exact action.
+_UNGRANTED = {"signal": "subject.approval.granted", "op": "neq", "value": True}
+
+
+def _tool_is(tool: str) -> dict:
+    return {"signal": "request.tool", "op": "eq", "value": tool}
+
+
+def _and(*leaves: dict) -> list[dict]:
+    return list(leaves)
+
+
+def _approval_gate(o: int, when_leaves: list[dict], *, reason: str) -> dict:
+    """A Conditional that BLOCKS the action until it has been granted.
+
+    `block when (… matching leaves … AND subject.approval.granted != true)` — the
+    SDK halts on the block, the operator grants the exact action, and the identical
+    re-submit re-governs to allow (the grant flips `subject.approval.granted`)."""
+    return {"kind": "Conditional", "ordinal": o, "payload": {
+        "when": {"all": list(when_leaves) + [_UNGRANTED]},
+        "then": {"action": "block", "reason": reason}}}
+
+
 def rules_for_version(n: int) -> list[dict]:
     if n <= 1:
         return []                                    # v1 = allow-all (observe only)
@@ -62,25 +87,30 @@ def rules_for_version(n: int) -> list[dict]:
     rules += _pii_rules(3)                            # v4: output PII/secret block
 
     # v5: block the payment write. v6: supersede with approval. v7+: context-aware.
+    #
+    # Approval is expressed as "block UNLESS already granted" — a Conditional whose
+    # `when` includes `subject.approval.granted != true`. This is deliberate, not a
+    # RequireApproval rule: the SDK's enforce path only HALTS a tool on outcome
+    # "block"; a `require_approval` obligation comes back as outcome "allow", so the
+    # tool would run ungoverned (verified live). The block-when-ungranted gate makes
+    # the SDK raise GovernanceBlocked, the operator grants the exact action
+    # (POST /v1/govern/approve → approval-as-fact), and the identical re-submitted
+    # call re-governs to allow (the ApprovalProducer supplies granted=true).
     if n == 5:
         rules.append({"kind": "BlockTool", "ordinal": 5,
                       "payload": {"tools": ["schedule_payment"]}})
     elif n == 6:
-        rules.append({"kind": "RequireApproval", "ordinal": 5, "payload": {
-            "tools": ["schedule_payment"], "tier": "authenticated",
-            "reason": "AP payment requires reviewer approval"}})
+        rules.append(_approval_gate(5, _and(
+            _tool_is("schedule_payment")),
+            reason="approval required: AP payment needs reviewer sign-off"))
     elif n >= 7:
-        rules.append({"kind": "Conditional", "ordinal": 5, "payload": {
-            "when": {"signal": "request.tool", "op": "eq",
-                     "value": "update_vendor_bank_details"},
-            "then": {"action": "require_approval", "tier": "elevated",
-                     "reason": "vendor bank-detail change requires elevated approval"}}})
-        rules.append({"kind": "Conditional", "ordinal": 6, "payload": {
-            "when": {"all": [
-                {"signal": "request.tool", "op": "eq", "value": "schedule_payment"},
-                {"signal": "request.tool_args.amount", "op": "gt", "value": _PAYMENT_THRESHOLD}]},
-            "then": {"action": "require_approval", "tier": "elevated",
-                     "reason": f"payment over EUR {_PAYMENT_THRESHOLD} requires approval"}}})
+        rules.append(_approval_gate(5, _and(
+            _tool_is("update_vendor_bank_details")),
+            reason="approval required: vendor bank-detail change (elevated)"))
+        rules.append(_approval_gate(6, _and(
+            _tool_is("schedule_payment"),
+            {"signal": "request.tool_args.amount", "op": "gt", "value": _PAYMENT_THRESHOLD}),
+            reason=f"approval required: payment over EUR {_PAYMENT_THRESHOLD} (elevated)"))
 
     if n >= 8:
         rules.append({"kind": "Conditional", "ordinal": 7, "payload": {
@@ -89,10 +119,9 @@ def rules_for_version(n: int) -> list[dict]:
                 {"signal": "request.tool_args.classification", "op": "in",
                  "value": ["public", "internal"]}]},
             "then": {"action": "block", "reason": "agent may not weaken a data classification"}}})
-        rules.append({"kind": "Conditional", "ordinal": 8, "payload": {
-            "when": {"signal": "request.tool", "op": "eq", "value": "propose_schema_change"},
-            "then": {"action": "require_approval", "tier": "elevated",
-                     "reason": "catalog schema change requires elevated approval"}}})
+        rules.append(_approval_gate(8, _and(
+            _tool_is("propose_schema_change")),
+            reason="approval required: catalog schema change (elevated)"))
     return rules
 
 

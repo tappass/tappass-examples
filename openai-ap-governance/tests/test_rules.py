@@ -32,16 +32,46 @@ def test_v5_blocks_payment_write():
                for r in rules_for_version(5))
 
 
-def test_v6_requires_approval_on_payment_not_block():
+def _approval_gates(n):
+    """Conditionals that block until granted (when includes subject.approval.granted)."""
+    out = []
+    for r in rules_for_version(n):
+        if r["kind"] != "Conditional":
+            continue
+        leaves = r["payload"]["when"].get("all", [r["payload"]["when"]])
+        if any(l.get("signal") == "subject.approval.granted" for l in leaves):
+            out.append(r)
+    return out
+
+
+def test_v6_payment_needs_approval_via_block_until_granted():
+    # Path B: approval is a block-when-ungranted Conditional, NOT a RequireApproval
+    # obligation (which the SDK enforce path does not halt on). No blanket BlockTool.
     rs = rules_for_version(6)
-    assert any(r["kind"] == "RequireApproval" for r in rs)
+    assert not any(r["kind"] == "RequireApproval" for r in rs)
     assert not any(r["kind"] == "BlockTool" for r in rs)
+    gates = _approval_gates(6)
+    assert len(gates) == 1
+    g = gates[0]
+    assert g["payload"]["then"]["action"] == "block"
+    assert "approval required" in g["payload"]["then"]["reason"]
+    leaves = g["payload"]["when"]["all"]
+    assert {"signal": "request.tool", "op": "eq", "value": "schedule_payment"} in leaves
 
 
 def test_v7_is_context_aware():
-    conds = [r for r in rules_for_version(7) if r["kind"] == "Conditional"]
-    actions = {r["payload"]["then"]["action"] for r in conds}
-    assert "require_approval" in actions
+    # Bank-change always gated; payment gated only over the threshold — both as
+    # block-until-granted Conditionals.
+    gates = _approval_gates(7)
+    tools = set()
+    for g in gates:
+        for l in g["payload"]["when"]["all"]:
+            if l.get("signal") == "request.tool":
+                tools.add(l["value"])
+    assert {"update_vendor_bank_details", "schedule_payment"} <= tools
+    # the payment gate carries the amount threshold
+    assert any(any(l.get("signal") == "request.tool_args.amount" and l["op"] == "gt"
+                   for l in g["payload"]["when"]["all"]) for g in gates)
 
 
 def test_v8_governs_catalog():

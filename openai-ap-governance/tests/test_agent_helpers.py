@@ -37,3 +37,51 @@ def test_model_routing(monkeypatch):
     made.clear()
     A.build_model(1, _settings(), "s")
     assert made["base_url"] == "https://app.tappass.ai/v1"
+
+
+# ── approve-and-resume orchestration (_drive) ────────────────────────────────
+from tappass._govern_call import GovernanceBlocked  # noqa: E402
+
+
+class _FakeAgent:
+    def __init__(self, raises):
+        self.raises = list(raises)   # exception or None, per invoke
+        self.invokes = 0
+
+    def invoke(self, messages, config):
+        self.invokes += 1
+        exc = self.raises[min(self.invokes - 1, len(self.raises) - 1)]
+        if exc is not None:
+            raise exc
+        return {"messages": [SimpleNamespace(content="done")]}
+
+
+def _handler(name="schedule_payment", args=None):
+    h = A.VerdictHandler(governed=True)
+    h.last_tool = (name, args or {"vendor_id": "V-1001", "amount": 100})
+    return h
+
+
+def test_drive_grants_exact_action_then_resumes():
+    agent = _FakeAgent([GovernanceBlocked("approval required: pay"), None])
+    grant = {}
+    def approve_cb(name, args, detail):
+        grant["call"] = (name, args); return True
+    A._drive(agent, "pay", {}, approve_cb, _handler())
+    assert agent.invokes == 2                       # halted, then resumed
+    assert grant["call"] == ("schedule_payment", {"vendor_id": "V-1001", "amount": 100})
+
+
+def test_drive_halts_when_reviewer_declines():
+    agent = _FakeAgent([GovernanceBlocked("approval required")])
+    A._drive(agent, "pay", {}, lambda *a: False, _handler())
+    assert agent.invokes == 1                        # no resume on decline
+
+
+def test_drive_does_not_grant_on_a_hard_block():
+    agent = _FakeAgent([GovernanceBlocked("blocked_tool: schedule_payment")])
+    granted = {"n": 0}
+    def approve_cb(*a):
+        granted["n"] += 1; return True
+    A._drive(agent, "pay", {}, approve_cb, _handler())
+    assert agent.invokes == 1 and granted["n"] == 0  # non-approval block → no grant

@@ -69,15 +69,41 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6,
     config = {"configurable": {"thread_id": session_id},
               "callbacks": [handler],
               "recursion_limit": max_steps * 2}
-    _drive(agent, prompt, config, s, version, approve_cb)
+    _drive(agent, prompt, config, approve_cb, handler)
     return session_id
 
 
-def _drive(agent, prompt: str, config: dict, s: Settings, version: int,
-           approve_cb) -> None:
-    """Invoke the agent and print the final message. Approval-resume is layered
-    on in Task 8 (kept as a separate seam so the spike result picks the path)."""
-    result = agent.invoke({"messages": [("system", SYSTEM), ("user", prompt)]}, config)
-    final = result["messages"][-1]
-    content = getattr(final, "content", final)
-    print(f"\n[ASSISTANT] {content}")
+def _drive(agent, prompt: str, config: dict, approve_cb,
+           handler: VerdictHandler, max_resumes: int = 3) -> None:
+    """Run the agent, driving the approve-and-resume loop.
+
+    Under ``tappass.govern(mode="enforce")`` a gated tool call raises
+    ``GovernanceBlocked`` from inside the tool, which propagates out of
+    ``agent.invoke`` (verified — LangGraph does not swallow it). When the block
+    is an approval gate and a reviewer hook is present, we grant the EXACT action
+    the agent just attempted (captured by the handler) and re-invoke on the same
+    thread so the identical call re-governs to allow (approval-as-fact). A
+    non-approval block, a declined approval, or no hook → surface and stop.
+    """
+    from tappass._govern_call import GovernanceBlocked
+
+    messages = {"messages": [("system", SYSTEM), ("user", prompt)]}
+    for _ in range(max_resumes + 1):
+        try:
+            result = agent.invoke(messages, config)
+            print(f"\n[ASSISTANT] {getattr(result['messages'][-1], 'content', result)}")
+            return
+        except GovernanceBlocked as exc:
+            reason = str(exc)
+            if "approval" not in reason.lower() or approve_cb is None:
+                return  # hard block (verdict already printed by the handler)
+            if not handler.last_tool:
+                return
+            name, args = handler.last_tool
+            if not approve_cb(name, args, {"reason": reason}):
+                print("  ↳ agent halts; a reviewer approves before this runs.")
+                return
+            # Resume: re-issue on the same thread; the grant now exists so the
+            # identical tool call re-governs to allow.
+            messages = {"messages": [("user", "Approved — please proceed.")]}
+    print("\n[done: approval retries exhausted]")
