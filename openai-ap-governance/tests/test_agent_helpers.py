@@ -1,22 +1,39 @@
-from apdemo.agent import build_client_kwargs
-from apdemo.config import Settings
+from types import SimpleNamespace
+import apdemo.agent as A
 
 
 def _settings(**kw):
-    base = dict(url="https://app.tappass.ai", pat=None, agent_key="tp_dev_x",
-                agent_uuid="ag_1", agent_id="ap-demo-agent", policy_id="p1", org="org-test",
-                model="gpt-4o-mini", openai_api_key="sk-test", owner_email="d@e.com")
+    base = dict(url="https://app.tappass.ai", pat="pat", agent_key="ak", agent_uuid="ag",
+                agent_id="ap-demo-agent", policy_id="pid", org="org", model="gpt-4o-mini",
+                openai_api_key="sk", owner_email="demo@example.com")
     base.update(kw)
-    return Settings(**base)
+    return SimpleNamespace(require_agent_key=lambda: base["agent_key"], **base)
 
 
-def test_v0_uses_openai_directly():
-    kw = build_client_kwargs(0, _settings())
-    assert kw["api_key"] == "sk-test"
-    assert "base_url" not in kw  # default OpenAI endpoint
+def test_v0_tools_are_ungoverned(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(A.tappass, "govern", lambda tools, **kw: captured.setdefault("called", True) or tools)
+    tools = A.build_tools(0, _settings(), "sess")
+    assert "called" not in captured           # v0 never wraps
+    assert {t.name for t in tools} == {"cowsay", "calculator"}
 
 
-def test_v1_uses_gateway_with_agent_key():
-    kw = build_client_kwargs(1, _settings())
-    assert kw["base_url"] == "https://app.tappass.ai/v1"
-    assert kw["api_key"] == "tp_dev_x"
+def test_v1_wraps_with_enforce(monkeypatch):
+    seen = {}
+    def fake_govern(tools, **kw):
+        seen.update(kw); return tools
+    monkeypatch.setattr(A.tappass, "govern", fake_govern)
+    A.build_tools(1, _settings(), "sess-123")
+    assert seen["mode"] == "enforce"
+    assert seen["agent_id"] == "ap-demo-agent"
+    assert seen["session_id"] == "sess-123"
+
+
+def test_model_routing(monkeypatch):
+    made = {}
+    monkeypatch.setattr(A, "ChatOpenAI", lambda **kw: made.update(kw) or SimpleNamespace(**kw))
+    A.build_model(0, _settings(), "s")
+    assert made["base_url"].startswith("https://api.openai.com")
+    made.clear()
+    A.build_model(1, _settings(), "s")
+    assert made["base_url"] == "https://app.tappass.ai/v1"
