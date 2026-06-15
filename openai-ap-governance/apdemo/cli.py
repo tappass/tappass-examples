@@ -22,20 +22,27 @@ def main(argv: list[str] | None = None) -> int:
 
     a = sub.add_parser(
         "activate",
-        help="create+publish+assign policy posture N (1..6) — one forward step")
-    a.add_argument("--version", type=int, required=True, choices=range(1, 7))
+        help="create+publish+assign policy posture N (1..8) — one forward step")
+    a.add_argument("--version", type=int, required=True, choices=range(1, 9))
 
-    r = sub.add_parser("run", help="run the agent at version N (0..6)")
-    r.add_argument("--version", type=int, required=True, choices=range(0, 7))
+    r = sub.add_parser("run", help="run the agent at version N (0..8)")
+    r.add_argument("--version", type=int, required=True, choices=range(0, 9))
     r.add_argument("--scenario", choices=["happy", "governed", "long"],
                    default="happy")
     r.add_argument("--prompt", default=None)
 
-    g = sub.add_parser("guide", help="interactive guided demo — press ENTER through v0→v6")
+    g = sub.add_parser("guide", help="interactive guided demo — press ENTER through v0→v8")
     g.add_argument("--fresh", action="store_true",
-                   help="reset to a brand-new policy first (clean v1→v6 history; re-runnable)")
+                   help="reset to a brand-new policy first (clean v1→v8 history; re-runnable)")
     sub.add_parser("status", help="show active policy + assignment")
     sub.add_parser("teardown", help="remove the demo agent + policy")
+
+    ap = sub.add_parser(
+        "approve",
+        help="operator grant for a pending action (POST /v1/govern/approve)")
+    ap.add_argument("--tool", required=True)
+    ap.add_argument("--arg", action="append", default=[],
+                    help="key=value (repeatable) — the exact tool args to approve")
 
     args = p.parse_args(argv)
     s = Settings.load()
@@ -78,6 +85,17 @@ def main(argv: list[str] | None = None) -> int:
         s = ensure_live(s)
         print(f"url={s.url} agent_uuid={s.agent_uuid} policy_id={s.policy_id} org={s.org}")
         return 0
+
+    if args.cmd == "approve":
+        import httpx
+        s = ensure_live(s)
+        kv = dict(a.split("=", 1) for a in args.arg)
+        r = httpx.post(f"{s.url}/v1/govern/approve",
+                       headers={"Authorization": f"Bearer {s.require_pat()}"},
+                       json={"agent_id": s.agent_id, "tool": args.tool, "args": kv},
+                       timeout=15)
+        print(f"approve {args.tool}({kv}) -> {r.status_code} {r.text[:160]}")
+        return 0 if r.status_code < 400 else 1
 
     if args.cmd == "teardown":
         print("Teardown: delete the agent + policy in the dashboard, or extend "
