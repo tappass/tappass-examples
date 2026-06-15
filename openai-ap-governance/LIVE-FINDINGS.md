@@ -232,3 +232,18 @@ NOTE (demo-tuning, deferred): live v2 email probe returns `block pii_in_output` 
 the `redact_tool_arg` obligation — so the "allowed but scrubbed" redact beat needs a
 redact target that isn't independently flagged as PII (or a reframed narration). To
 resolve when the paused demo work resumes.
+
+### Final ladder verification (2026-06-15) — green against app.tappass.ai
+With the final 9-rung rules (Path B approvals, ASCII redact):
+- v1 cowsay/calculator audited; v2 'voldemort'→block "the cow may not say that",
+  'ACME-4471'→allow+`redact_tool_arg`, vendor ids untouched.
+- v3 cowsay 4th call → block `per_tool_rate_limit_exceeded:cowsay` (3/2min, from audit).
+- v5 schedule_payment → block `blocked_tool:schedule_payment`.
+- v7 pay €500 → allow; pay €25k → block "approval required … (elevated)"; bank change
+  → block "approval required … (elevated)".
+- v8 downgrade classification → block "agent may not weaken a data classification";
+  raise → allow; schema change → block "approval required … (elevated)".
+All approval beats HALT correctly (block + "approval required" reason); the SDK harness
+grants the exact action + re-invokes. Full in-run RESUME (re-submit → allow) completes
+once PR #751 (cross-org grant scoping) deploys — verified locally that GovernanceBlocked
+propagates out of create_agent.invoke and the grant records.
