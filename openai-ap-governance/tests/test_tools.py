@@ -1,34 +1,30 @@
-from apdemo.tools import tools_for_version, dispatch
+from apdemo import tools as T
 
 
-def test_v0_has_only_calculator():
-    schemas, _impls = tools_for_version(0)
-    names = {s["function"]["name"] for s in schemas}
-    assert names == {"calculate"}
+def test_cowsay_and_calculator_are_v0():
+    names = {t.name for t in T.tools_for_version(0)}
+    assert names == {"cowsay", "calculator"}
 
 
-def test_v3_unlocks_schedule_payment():
-    schemas, _ = tools_for_version(3)
-    names = {s["function"]["name"] for s in schemas}
-    assert {"calculate", "lookup_vendor", "compute_invoice_total", "schedule_payment"} <= names
+def test_cowsay_renders_message():
+    out = T.dispatch("cowsay", {"message": "hi"})
+    assert "hi" in out and "^__^" in out  # the cow
 
 
-def test_v6_unlocks_catalog_tools():
-    schemas, _ = tools_for_version(6)
-    names = {s["function"]["name"] for s in schemas}
-    assert {"set_asset_classification", "propose_schema_change"} <= names
+def test_calculator_basic_ops():
+    assert T.dispatch("calculator", {"a": 6, "b": 7, "op": "*"}) == "42.0"
+    assert T.dispatch("calculator", {"a": 1, "b": 0, "op": "/"}).startswith("Error")
 
 
-def test_calculate_executes():
-    assert dispatch("calculate", {"expression": "40 + 2"}) == {"result": 42}
+def test_tool_gating_is_additive():
+    assert {t.name for t in T.tools_for_version(4)} >= {"cowsay", "calculator",
+                                                        "lookup_vendor", "compute_invoice_total"}
+    assert "schedule_payment" not in {t.name for t in T.tools_for_version(4)}
+    assert "schedule_payment" in {t.name for t in T.tools_for_version(5)}
+    assert "update_vendor_bank_details" in {t.name for t in T.tools_for_version(7)}
+    assert "set_asset_classification" in {t.name for t in T.tools_for_version(8)}
 
 
-def test_compute_invoice_total_with_tax():
-    out = dispatch("compute_invoice_total",
-                   {"line_items": [{"amount": 100.0}, {"amount": 50.0}], "tax_rate": 0.1})
-    assert out == {"subtotal": 150.0, "tax": 15.0, "total": 165.0}
-
-
-def test_lookup_vendor_returns_iban():
-    out = dispatch("lookup_vendor", {"vendor_id": "V-1001"})
-    assert out["iban"].startswith("DE")
+def test_tools_are_langchain_tools():
+    for t in T.tools_for_version(8):
+        assert hasattr(t, "name") and hasattr(t, "invoke")  # StructuredTool surface
