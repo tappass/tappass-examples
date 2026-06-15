@@ -1,28 +1,42 @@
 """Per-version policy rule-sets. Pure functions; no network.
 
-Each rule is {"kind": str, "ordinal": int, "payload": dict} matching the
-TapPass v2 RuleSpec. Each version is the COMPLETE rule-set that policy version N
-publishes (publish replaces the active rule-set).
+Each rule is {"kind": str, "ordinal": int, "payload": dict} (TapPass v2 RuleSpec).
+rules_for_version(n) returns the COMPLETE rule-set version n publishes. Rules are
+cumulative EXCEPT where a later version refines an earlier control (v5 blocks the
+payment; v6 supersedes that with approval; v7 makes approval context-aware).
 
-IMPORTANT — the kernel DEFAULTS TO ALLOW (ADR 0013). So enforcement is done with
-positive *block* / *approval* rules, NOT with allow-lists: an ``AllowTool``
-allow-list blocks nothing on its own because unlisted tools already default to
-allow. We therefore gate writes with ``BlockTool`` / ``RequireApproval`` /
-``Conditional``. Rule kinds + payloads are grounded in
-tappass/kernel/policy/templates.py and conditional.py and verified live.
-
-These rules are evaluated for TOOL_CALL behaviors the agent submits to
-/v1/govern before executing each tool, AND for the LLM_CALL output scan
-(BlockPII / BlockSecrets) on the gateway path.
+The kernel DEFAULTS TO ALLOW (ADR 0013) — enforcement is positive block/approval
+rules, never allow-lists. Kinds + payloads grounded in kernel/policy/templates.py,
+conditional.py, signal_catalog.py, producers/tool_rate.py and verified live (Task 1).
 """
 from __future__ import annotations
 
-_WRITE_TOOLS = ["schedule_payment", "update_vendor_bank_details"]
+# v2 — govern the cow's words
+_BANNED_PATTERN = "(?i)(voldemort|enron)"            # banned names the cow may not say
+_REDACT_PATTERN = r"[\w.+-]+@[\w-]+\.[\w.-]+"        # scrub emails out of the message
+# v3 — frequency
+_RATE_TOOL, _RATE_MAX, _RATE_WINDOW_S = "cowsay", 3, 120
+# v7 — payment threshold
+_PAYMENT_THRESHOLD = 10000  # EUR
 
-_PAYMENT_THRESHOLD = 10000  # EUR; payments above this need approval (v5)
+
+def _cowsay_rules(o: int) -> list[dict]:
+    return [
+        {"kind": "Conditional", "ordinal": o, "payload": {
+            "when": {"signal": "request.tool_args.message", "op": "match",
+                     "value": _BANNED_PATTERN},
+            "then": {"action": "block", "reason": "the cow may not say that"}}},
+        {"kind": "RedactToolArg", "ordinal": o + 1, "payload": {
+            "matchers": [{"tool": "cowsay", "arg": "message", "pattern": _REDACT_PATTERN}]}},
+    ]
 
 
-def _block_pii_and_secrets(o: int) -> list[dict]:
+def _rate_rules(o: int) -> list[dict]:
+    return [{"kind": "PerToolRateLimit", "ordinal": o, "payload": {
+        "tool": _RATE_TOOL, "max": _RATE_MAX, "window_seconds": _RATE_WINDOW_S}}]
+
+
+def _pii_rules(o: int) -> list[dict]:
     return [
         {"kind": "BlockSecrets", "ordinal": o, "payload": {}},
         {"kind": "BlockPII", "ordinal": o + 1, "payload": {"scope": "output"}},
@@ -31,78 +45,62 @@ def _block_pii_and_secrets(o: int) -> list[dict]:
 
 def rules_for_version(n: int) -> list[dict]:
     if n <= 1:
-        return []  # v1 = allow-all (observability only)
+        return []                                    # v1 = allow-all (observe only)
 
-    # v2+: secret scan + PII block on model-bound output.
-    rules: list[dict] = _block_pii_and_secrets(0)
+    rules: list[dict] = _cowsay_rules(0)             # v2: block banned word + redact
     if n == 2:
         return rules
 
-    # v3: hard-block the write tools outright (default-allow kernel => BlockTool).
+    rules += _rate_rules(2)                           # v3: cowsay rate limit
     if n == 3:
-        rules.append({"kind": "BlockTool", "ordinal": 2,
-                      "payload": {"tools": list(_WRITE_TOOLS)}})
         return rules
 
-    # v4: payments allowed but require human approval; bank-changes still blocked.
-    if n == 4:
-        rules.append({"kind": "BlockTool", "ordinal": 2,
-                      "payload": {"tools": ["update_vendor_bank_details"]}})
-        rules.append({"kind": "RequireApproval", "ordinal": 3, "payload": {
-            "tools": ["schedule_payment"],
-            "tier": "authenticated",
-            "reason": "AP payment requires reviewer approval",
-        }})
-        return rules
+    rules += _pii_rules(3)                            # v4: output PII/secret block
 
-    # v5: context-aware. Bank-detail changes ALWAYS need elevated approval
-    # (classic AP-fraud vector); payments need approval only over the threshold.
-    if n >= 5:
-        rules.append({"kind": "Conditional", "ordinal": 2, "payload": {
+    # v5: block the payment write. v6: supersede with approval. v7+: context-aware.
+    if n == 5:
+        rules.append({"kind": "BlockTool", "ordinal": 5,
+                      "payload": {"tools": ["schedule_payment"]}})
+    elif n == 6:
+        rules.append({"kind": "RequireApproval", "ordinal": 5, "payload": {
+            "tools": ["schedule_payment"], "tier": "authenticated",
+            "reason": "AP payment requires reviewer approval"}})
+    elif n >= 7:
+        rules.append({"kind": "Conditional", "ordinal": 5, "payload": {
             "when": {"signal": "request.tool", "op": "eq",
                      "value": "update_vendor_bank_details"},
             "then": {"action": "require_approval", "tier": "elevated",
-                     "reason": "Vendor bank-detail change requires elevated approval"},
-        }})
-        rules.append({"kind": "Conditional", "ordinal": 3, "payload": {
+                     "reason": "vendor bank-detail change requires elevated approval"}}})
+        rules.append({"kind": "Conditional", "ordinal": 6, "payload": {
             "when": {"all": [
                 {"signal": "request.tool", "op": "eq", "value": "schedule_payment"},
-                {"signal": "request.tool_args.amount", "op": "gt", "value": _PAYMENT_THRESHOLD},
-            ]},
+                {"signal": "request.tool_args.amount", "op": "gt", "value": _PAYMENT_THRESHOLD}]},
             "then": {"action": "require_approval", "tier": "elevated",
-                     "reason": f"Payment over EUR {_PAYMENT_THRESHOLD} requires approval"},
-        }})
-    if n == 5:
-        return rules
+                     "reason": f"payment over EUR {_PAYMENT_THRESHOLD} requires approval"}}})
 
-    # v6: same kernel now governs catalog edits. The agent may never WEAKEN a
-    # classification (floor rule: block any target below confidential), and any
-    # schema change needs elevated approval.
-    if n >= 6:
-        rules.append({"kind": "Conditional", "ordinal": 4, "payload": {
+    if n >= 8:
+        rules.append({"kind": "Conditional", "ordinal": 7, "payload": {
             "when": {"all": [
                 {"signal": "request.tool", "op": "eq", "value": "set_asset_classification"},
                 {"signal": "request.tool_args.classification", "op": "in",
-                 "value": ["public", "internal"]},
-            ]},
-            "then": {"action": "block",
-                     "reason": "agent may not weaken a data classification"},
-        }})
-        rules.append({"kind": "Conditional", "ordinal": 5, "payload": {
+                 "value": ["public", "internal"]}]},
+            "then": {"action": "block", "reason": "agent may not weaken a data classification"}}})
+        rules.append({"kind": "Conditional", "ordinal": 8, "payload": {
             "when": {"signal": "request.tool", "op": "eq", "value": "propose_schema_change"},
             "then": {"action": "require_approval", "tier": "elevated",
-                     "reason": "catalog schema change requires elevated approval"},
-        }})
+                     "reason": "catalog schema change requires elevated approval"}}})
     return rules
 
 
 def change_note(n: int) -> str:
     notes = {
         1: "v1: allow-all — observability only",
-        2: "v2: secret scan + PII block on output",
-        3: "v3: tool-call enforcement (block the payment + bank-change writes)",
-        4: "v4: human approval on payments (bank-change still blocked)",
-        5: "v5: context-aware — bank changes + over-threshold payments need approval",
-        6: "v6: govern the catalog — block classification weakening; approve schema changes",
+        2: "v2: govern the cow's words — block a banned name, redact emails",
+        3: "v3: rate-limit cowsay (3 calls / 2 min, from the audit trail)",
+        4: "v4: secret scan + PII block on output",
+        5: "v5: tool-call enforcement — block the payment write",
+        6: "v6: human approval on payments (escalate → approve → resume)",
+        7: "v7: context-aware — bank changes + over-threshold payments need approval",
+        8: "v8: govern the catalog — block classification weakening; approve schema changes",
     }
     return notes[n]
