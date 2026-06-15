@@ -88,9 +88,11 @@ def _drive(agent, prompt: str, config: dict, approve_cb,
     from tappass._govern_call import GovernanceBlocked
 
     messages = {"messages": [("system", SYSTEM), ("user", prompt)]}
-    for _ in range(max_resumes + 1):
+    base_thread = (config.get("configurable") or {}).get("thread_id", "t")
+    cfg = config
+    for attempt in range(max_resumes + 1):
         try:
-            result = agent.invoke(messages, config)
+            result = agent.invoke(messages, cfg)
             print(f"\n[ASSISTANT] {getattr(result['messages'][-1], 'content', result)}")
             return
         except GovernanceBlocked as exc:
@@ -103,7 +105,12 @@ def _drive(agent, prompt: str, config: dict, approve_cb,
             if not approve_cb(name, args, {"reason": reason}):
                 print("  ↳ agent halts; a reviewer approves before this runs.")
                 return
-            # Resume: re-issue on the same thread; the grant now exists so the
-            # identical tool call re-governs to allow.
-            messages = {"messages": [("user", "Approved — please proceed.")]}
+            # Resume on a FRESH thread with the original prompt. When the tool
+            # raised GovernanceBlocked, the checkpoint kept the assistant turn's
+            # dangling tool_call with no tool result; continuing that thread sends
+            # an invalid message sequence to the model ("Invalid request format").
+            # A fresh thread re-plans and re-issues the now-granted (single-use)
+            # call cleanly, which re-governs to allow.
+            cfg = {**config, "configurable": {**(config.get("configurable") or {}),
+                                              "thread_id": f"{base_thread}-r{attempt + 1}"}}
     print("\n[done: approval retries exhausted]")
