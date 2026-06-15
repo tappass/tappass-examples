@@ -20,9 +20,18 @@ def test_policy_body():
 
 
 def test_version_body_carries_rules_and_note():
-    b = version_body(3)
-    assert b["change_note"].startswith("v3")
+    b = version_body(5)
+    assert b["change_note"].startswith("v5")
     assert any(r["kind"] == "BlockTool" for r in b["rules"])
+
+
+def test_version_body_covers_new_ladder():
+    for n in range(1, 9):
+        body = version_body(n)
+        assert "rules" in body and "change_note" in body
+    # v8 carries the catalog-governance rules + the cumulative cowsay rate limit
+    kinds = [r["kind"] for r in version_body(8)["rules"]]
+    assert "Conditional" in kinds and "PerToolRateLimit" in kinds
 
 
 def test_assignment_body_keys_on_agent_uuid():
