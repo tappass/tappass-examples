@@ -104,7 +104,7 @@ governance increment. Bold rungs are the new/changed ones.
 | **v0** | `cowsay(message)`, `calculator(a,b,op)`. `ChatOpenAI` → OpenAI directly, tools unwrapped. | **None** — not routed, no policy, no audit. | "This is the agent you sent us. Where did that call go? What did it cost? Who could stop it? You can't answer any of these." |
 | **v1** | same | **Allow-all.** Gateway `base_url` + `tappass.govern(mode="enforce")`; no restrictive rules. | "Two lines changed — `base_url` and `tappass.govern`. We've blocked nothing, but now every LLM call and every tool call is in the audit trail with cost + latency." |
 | **v2** | same | **Govern the cow's words (argument content).** `Conditional` block when `request.tool_args.message` matches a banned name/word; optional `RedactToolArg` to scrub a pattern from the message. | "Governance on your own tool's *arguments*. The cow may not say *that* — and we can redact a value out of it instead of blocking." |
-| **v3** | same | **Frequency / velocity.** `PerToolRateLimit`: at most N `cowsay` (and/or `calculator`) calls per X minutes, counted from the **durable audit trail**. | "Run it again… and again — the (N+1)th is blocked `rate_limited`. The window is read off the audit log, so it holds across processes — not in-memory counting." |
+| **v3** | same | **Frequency / velocity.** `PerToolRateLimit` on `cowsay`: at most **3 calls per 2 minutes**, counted from the **durable audit trail**. | "Run it again… and again — the **4th** is blocked `rate_limited`. The window is read off the audit log, so it holds across processes — not in-memory counting." |
 | **v4** | + `lookup_vendor(vendor_id)`, `compute_invoice_total(line_items, tax_rate)` | **PII/secret block on output.** `BlockSecrets` + `BlockPII{output}`. | The IBAN read-out is blocked (`pii_in_output`) before it reaches the user. Same primitive as v2, higher stakes. |
 | **v5** | + `schedule_payment(vendor_id, amount)` (a write) | **Tool-call enforcement.** `BlockTool` on the payment write. | Reads fine; the agent isn't cleared to move money, so the payment tool is blocked outright. |
 | **v6** | same | **Human-in-the-loop approval — real escalate → approve → resume.** `RequireApproval` on `schedule_payment`. | The headline beat. The agent halts on a *real* pending approval; a human approves in the dashboard; the agent **resumes** and completes; the whole cycle is attributable to the rule in the audit + session trace. |
@@ -120,13 +120,14 @@ All `input.*` paths and rule kinds confirmed in `kernel/policy/templates.py`,
 `conditional.py`, `signal_catalog.py`, and `kernel/producers/tool_rate.py`. No custom
 producer or rule-kind is required.
 
-- **v2 — content block:** `Conditional` with
+- **v2 — content block + redact:** `Conditional` with
   `when: {signal: "request.tool_args.message", op: "match"|"contains"|"eq", value: <banned>}`,
-  `then: {action: "block", reason: "banned_message"}`. Optional **redact**: `RedactToolArg`
-  with `{matchers:[{tool:"cowsay", arg:"message", pattern:<regex>}]}` (emits a
-  `redact_tool_arg` obligation; the effect plane strips the span and allows the call).
-- **v3 — rate limit:** `PerToolRateLimit` with `{tool:"cowsay", max:N, window_seconds:X}`
-  (and optionally a second for `calculator`). Produced by `ToolRateProducer`, which queries
+  `then: {action: "block", reason: "banned_message"}` — **plus** `RedactToolArg` with
+  `{matchers:[{tool:"cowsay", arg:"message", pattern:<regex>}]}` (emits a `redact_tool_arg`
+  obligation; the effect plane strips the span and allows the call). Two runs show both:
+  blocked banned word, redacted sensitive token.
+- **v3 — rate limit:** a single `PerToolRateLimit` with
+  `{tool:"cowsay", max:3, window_seconds:120}`. Produced by `ToolRateProducer`, which queries
   `govern_allow` audit records in the window (`state.tool_rate.timestamps` / `.now_ns`).
 - **v4 — output PII/secrets:** `BlockSecrets` + `BlockPII{scope:"output"}` (unchanged from
   the current `rules.py`). Note: PII/secret detection is **output/text-scoped**, not on raw
@@ -259,14 +260,14 @@ Live verification (not in unit tests) reuses the `LIVE-FINDINGS.md` methodology 
 - No input-scoped PII *detection* on tool args (v4 PII stays on LLM output, where detection
   runs); arg-level scrubbing is the `RedactToolArg` pattern in v2.
 
-## Open questions for spec review
+## Decisions (resolved at spec review)
 
-1. **Rate-limit scope (v3):** limit `cowsay` only, or `cowsay` *and* `calculator`? And what
-   `max` / `window_seconds` reads best on stage (e.g. 3 calls / 2 min so the block lands on
-   the 4th press)?
-2. **v2 banned token:** a name (e.g. a competitor / a person) or a category (a secret-looking
-   token)? And do we show the **redact** flourish in v2, or keep v2 to a clean block and save
-   redaction for elsewhere?
-3. **Approver identity:** approve as the PAT's own user (simplest), or provision a distinct
-   "reviewer" user so the trace shows segregation of duties (agent acts, *different* human
-   approves)?
+1. **Rate-limit scope (v3):** `cowsay` **only**, `max=3`, `window_seconds=120` (3 calls per
+   2 minutes) — the block visibly lands on the 4th press. Single `PerToolRateLimit` rule.
+2. **v2 content beat:** **block + redact flourish.** v2 blocks `cowsay` when the message
+   matches a banned word/name (`Conditional`), **and** shows `RedactToolArg` scrubbing a
+   pattern (e.g. an email/secret-looking token) out of the message instead of blocking — two
+   runs, one rung: "block what's forbidden, redact what's sensitive."
+3. **Approver identity:** approve as the **PAT's own user** (simplest provisioning). The
+   trace shows the agent acted and that user approved; segregation-of-duties (a distinct
+   reviewer user) is a later enhancement, not in this build.
