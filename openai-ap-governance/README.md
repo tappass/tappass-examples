@@ -55,7 +55,7 @@ agent = create_agent(model, tools=tools, checkpointer=MemorySaver())
 
 ```python
 # after — v1+ (two lines changed; agent code stays the same)
-model = ChatOpenAI(model="gpt-4o", base_url="https://gateway.tappass.ai/v1",
+model = ChatOpenAI(model="gpt-4o", base_url="https://app.tappass.ai/v1",
                    api_key=agent_key)                         # ← line 1
 tools = tappass.govern(tools, mode="enforce",                 # ← line 2
                        agent_id=agent_id, session_id=sid)
