@@ -15,42 +15,53 @@ from . import agent as agent_mod
 from .config import Settings
 from .provision import ControlPlane, _writeback_env
 from .rules import change_note
-from .scenarios import prompt_for
+from .scenarios import V2_REDACT_PROMPT, prompt_for
 
 BOLD = "\033[1m"; DIM = "\033[2m"; GREEN = "\033[32m"; YELLOW = "\033[33m"
 CYAN = "\033[36m"; RESET = "\033[0m"
 RULE = "─" * 72
 
 STEPS = [
-    {"version": 0, "title": "v0 — the agent you have today (ungoverned)",
-     "why": "A plain OpenAI agent. The call goes STRAIGHT to OpenAI — no TapPass.",
+    {"version": 0, "title": "v0 — the agent you sent us (ungoverned)",
+     "why": "Your LangGraph agent with cowsay + calculator, talking STRAIGHT to "
+            "OpenAI — no TapPass.",
      "scenario": "happy",
      "watch": "Open the dashboard: nothing. No audit, no cost, no control."},
-    {"version": 1, "title": "v1 — one line, now observed",
-     "why": "Point the OpenAI client at the TapPass gateway (base_url swap). "
-            "Nothing else changes.",
+    {"version": 1, "title": "v1 — two lines, now observed",
+     "why": "base_url → the TapPass gateway, and tappass.govern() around the "
+            "tools. Nothing else in the agent changes.",
      "scenario": "happy",
-     "watch": "Same answer — but now it's a governed turn with a full trace."},
-    {"version": 2, "title": "v2 — stop data leaving",
-     "why": "Policy now blocks PII / secrets in the agent's output.",
+     "watch": "Same answer — now a governed turn with a full trace (cost, latency)."},
+    {"version": 2, "title": "v2 — govern the cow's words",
+     "why": "Policy blocks a banned name in the message, and redacts an internal "
+            "reference code out of it.",
      "scenario": "governed",
-     "watch": "The agent tries to read out a bank number → TapPass blocks it."},
-    {"version": 3, "title": "v3 — gate the dangerous actions",
-     "why": "The payment and bank-change write tools are blocked outright.",
+     "extra_prompt": V2_REDACT_PROMPT,
+     "watch": "'voldemort' → blocked; then a second run scrubs 'ACME-4471' but "
+              "still lets the cow speak."},
+    {"version": 3, "title": "v3 — rate-limit the tool",
+     "why": "cowsay is capped at 3 calls per 2 minutes, counted from the audit trail.",
+     "scenario": "governed",
+     "watch": "The 4th cowsay in the run is blocked — rate_limited."},
+    {"version": 4, "title": "v4 — stop data leaving",
+     "why": "PII / secrets are blocked in the agent's output.",
+     "scenario": "governed",
+     "watch": "Reading out a vendor's bank number → blocked (pii_in_output)."},
+    {"version": 5, "title": "v5 — gate the dangerous action",
+     "why": "The payment write tool is blocked outright.",
      "scenario": "governed",
      "watch": "The agent tries to schedule a payment → blocked."},
-    {"version": 4, "title": "v4 — human in the loop",
-     "why": "Payments are allowed, but each one requires human approval.",
+    {"version": 6, "title": "v6 — human in the loop",
+     "why": "Payments are allowed, but each one needs human approval.",
      "scenario": "governed",
-     "watch": "The agent pauses for sign-off — you approve it (ENTER) and it "
-              "proceeds; the approval + execution are audited."},
-    {"version": 5, "title": "v5 — context-aware (the fraud beat)",
-     "why": "Small payments flow; large ones need elevated approval; vendor "
-            "bank-account changes ALWAYS need approval.",
+     "watch": "The agent halts for sign-off — approve it (ENTER) and it resumes; "
+              "the approval + execution are audited."},
+    {"version": 7, "title": "v7 — context-aware (the fraud beat)",
+     "why": "Small payments flow; large ones AND vendor bank-account changes need "
+            "elevated approval.",
      "scenario": "governed",
-     "watch": "A €25k payment escalates for sign-off — approve it (ENTER) to "
-              "resume. The classic AP-fraud guardrail."},
-    {"version": 6, "title": "v6 — govern the agent that touches your catalog",
+     "watch": "A €25k payment halts for sign-off — approve it (ENTER) to resume."},
+    {"version": 8, "title": "v8 — govern the agent that touches your catalog",
      "why": "The same kernel now governs an agent editing your Collibra-style "
             "data catalog.",
      "scenario": "governed",
@@ -128,7 +139,7 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
     print(f"\n{BOLD}TapPass · Accounts-Payable agent governance demo{RESET}")
     print(f"{DIM}Agent:  {agent_url}{RESET}")
     print(f"{DIM}Policy: {policy_url}{RESET}")
-    print(f"{DIM}Press ENTER through v0→v6. Keep the dashboard open alongside.{RESET}")
+    print(f"{DIM}Press ENTER through v0→v8. Keep the dashboard open alongside.{RESET}")
     _pause("  ↵  press ENTER to begin")
 
     for step in STEPS:
@@ -159,10 +170,18 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
         if v >= 1 and sid:
             print(f"\n  {CYAN}→ open the governed trace:{RESET} "
                   f"{s.url}/app/sessions/{sid}")
+        # Some steps show a second beat on the same posture (e.g. v2's redact
+        # flourish: a different message the policy scrubs rather than blocks).
+        extra = step.get("extra_prompt")
+        if extra:
+            print(f"\n  {DIM}…and again, redacted:{RESET} \"{extra}\"")
+            _pause("  ↵  press ENTER to run the redact beat")
+            agent_mod.run(v, extra, s,
+                          approve_cb=lambda n, a, d: _approve(s, n, a, d))
         _pause("  ↵  press ENTER for the next step")
 
     print(f"\n{CYAN}{RULE}{RESET}")
-    print(f"{BOLD}That's the ladder.{RESET} Six policy versions, activated live — "
+    print(f"{BOLD}That's the ladder.{RESET} Eight policy versions, activated live — "
           "and the agent code never changed.")
     print(f"  Policy version history: {policy_url}")
     if fresh and policy_id != s.policy_id:
