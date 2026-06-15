@@ -205,3 +205,30 @@ real recorded grant, visible in the approvals list/audit) but "resume" ✗.
 - Real **approve-and-resume** (requirement #2) is **not achievable** against the
   current deployed server via `/v1/govern` — needs a server-side fix (consume the
   grant on the decision path, or make the path escalate+persist).
+
+### CORRECTIONS after root-causing (2026-06-15, same day)
+
+**Finding #4 (RedactToolArg) was a PATTERN bug, not a rule-kind bug.** Reproduced
+locally with regorus: the v2 redact pattern `[\w.+-]+@[\w-]+\.[\w.-]+` uses Unicode
+`\w`, whose class expansion makes the compiled regex exceed regorus's 100 KB limit
+→ the whole policy fails closed (`policy_eval_failed`) on EVERY call. The same `\w`
+pattern breaks `BlockToolArgMatch` too — so it is NOT RedactToolArg-specific. An
+ASCII-only pattern (`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+`) compiles small and
+works: clean→allow, email→allow+`redact_tool_arg` obligation. Fixed demo-side in
+`apdemo/rules.py` (97ae1f5). NO server change needed for this.
+(Optional server hardening: validate/▸reject oversized user regexes at policy-author
+time with a clear error instead of a runtime fail-closed `policy_eval_failed`.)
+
+**Finding #3 (approval resume) IS a real server bug — fix PR opened.** Root cause:
+`grant_action` stored the grant under the OPERATOR's org (`ctx.actor.org_id`) but the
+ApprovalProducer claims it under the AGENT's org on re-govern; those differ for a
+cross-org PAT (home org vs the agent's resource org). The fingerprint does NOT include
+org_id, so only the store key was wrong. Fix = resolve the agent's org and store the
+grant there → `tappass/tappass` PR #751
+(`fix/approval-grant-agent-org-scoping`). Awaiting review + deploy. Once deployed, the
+demo's v6–v8 approve→resume beats can be finished/verified.
+
+NOTE (demo-tuning, deferred): live v2 email probe returns `block pii_in_output` ALONGSIDE
+the `redact_tool_arg` obligation — so the "allowed but scrubbed" redact beat needs a
+redact target that isn't independently flagged as PII (or a reframed narration). To
+resolve when the paused demo work resumes.
