@@ -22,12 +22,11 @@ _BANNED_PATTERN = "(?i)(voldemort|enron)"            # banned names the cow may 
 # ASCII so they compile small. The shape (2+ caps, dash, 3+ alnum) avoids vendor
 # ids like V-1001 / INV-77.
 _REDACT_PATTERN = r"[A-Z]{2,}-[A-Z0-9]{3,}"
-# v3 — frequency. Window deliberately SHORT (30s): the limit counts govern_allow
-# records from the durable audit trail, which spans demo runs. A short window
-# ages out the earlier beats (v0–v2 cowsay) and any prior run by the time you
-# reach v3, so the beat reliably shows "first 3 pass, 4th blocked" instead of
-# inheriting a used-up 2-minute budget.
-_RATE_TOOL, _RATE_MAX, _RATE_WINDOW_S = "cowsay", 3, 30
+# v3 — frequency. Rate-limit `send_reminder`, a tool used ONLY in v3, so its
+# count window is never polluted by other beats (unlike cowsay, which v0–v2
+# use). Window kept short (30s) so a quick re-run also starts clean. Result:
+# the beat reliably shows "first 3 reminders pass, 4th blocked".
+_RATE_TOOL, _RATE_MAX, _RATE_WINDOW_S = "send_reminder", 3, 30
 # v7 — payment threshold
 _PAYMENT_THRESHOLD = 10000  # EUR
 
@@ -134,7 +133,7 @@ def change_note(n: int) -> str:
     notes = {
         1: "v1: allow-all — observability only",
         2: "v2: govern the cow's words — block a banned name, redact emails",
-        3: "v3: rate-limit cowsay (3 calls / 30s, from the audit trail)",
+        3: "v3: rate-limit send_reminder (3 calls / 30s, from the audit trail)",
         4: "v4: secret scan + PII block on output",
         5: "v5: tool-call enforcement — block the payment write",
         6: "v6: human approval on payments (escalate → approve → resume)",

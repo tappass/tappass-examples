@@ -16,14 +16,6 @@ from . import catalog
 _OPS = {"+": _op.add, "-": _op.sub, "*": _op.mul, "/": _op.truediv}
 
 
-#: A small "thinking" pause so each governed cowsay call is recorded in the
-#: durable audit trail before the next one is governed. The v3 rate-limit
-#: producer counts govern_allow records from that trail; without a gap a fast
-#: burst undercounts (the writes lag) and the 4th call slips through. ~2.5s lets
-#: each call settle so the limit reliably fires on the 4th.
-_COWSAY_SETTLE_SECONDS = 2.5
-
-
 @tool
 def cowsay(message: str) -> str:
     """Display a message as ASCII art of a cow saying it.
@@ -31,8 +23,6 @@ def cowsay(message: str) -> str:
     Args:
         message: The text the cow should say.
     """
-    import time
-    time.sleep(_COWSAY_SETTLE_SECONDS)
     border = "-" * (len(message) + 2)
     return (f" {border}\n< {message} >\n {border}\n        \\   ^__^\n"
             f"         \\  (oo)\\_______\n            (__)\\       )\\/\\\n"
@@ -53,6 +43,28 @@ def calculator(a: float, b: float, op: str) -> str:
     if op == "/" and b == 0:
         return "Error: division by zero"
     return str(_OPS[op](float(a), float(b)))
+
+
+#: A small "thinking" pause so each governed send_reminder call is recorded in
+#: the durable audit trail before the next one is governed. The v3 rate-limit
+#: producer counts govern_allow records from that trail; without a gap a fast
+#: burst undercounts (the writes lag) and the 4th call slips through. ~2.5s lets
+#: each call settle so the limit reliably fires on the 4th. send_reminder is the
+#: ONLY tool the rate limit targets, and it's used ONLY in v3 — so its window is
+#: never polluted by other beats (cowsay, used in v0–v2, is unaffected).
+_REMINDER_SETTLE_SECONDS = 2.5
+
+
+@tool
+def send_reminder(vendor_id: str) -> str:
+    """Send a payment-reminder notification to a vendor.
+
+    Args:
+        vendor_id: The vendor to remind.
+    """
+    import time
+    time.sleep(_REMINDER_SETTLE_SECONDS)
+    return str({"status": "reminder_sent", "vendor_id": vendor_id})
 
 
 @tool
@@ -98,6 +110,7 @@ def propose_schema_change(asset_id: str, change: str) -> str:
 _REGISTRY: dict[str, tuple[int, object]] = {
     "cowsay": (0, cowsay),
     "calculator": (0, calculator),
+    "send_reminder": (3, send_reminder),
     "lookup_vendor": (4, lookup_vendor),
     "compute_invoice_total": (4, compute_invoice_total),
     "schedule_payment": (5, schedule_payment),
