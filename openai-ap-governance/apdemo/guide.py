@@ -78,15 +78,21 @@ def _pause(prompt: str = "  ↵  press ENTER to continue") -> None:
 
 
 def _approve(s: Settings, name: str, args: dict, detail: dict) -> bool:
-    """Human-in-the-loop sign-off, invoked when TapPass escalates a tool call.
+    """Human-in-the-loop sign-off, invoked when TapPass holds a tool call.
 
-    You are the reviewer TapPass escalated to. On ENTER we record a real
-    approval grant for the *exact* action (POST /v1/govern/approve, control-plane
-    PAT) — approval-as-fact: the kernel's ApprovalProducer then finds the grant
-    when the agent re-submits, and governance itself re-allows. Ctrl-C denies.
+    You are the reviewer TapPass routed the request to. The agent's govern call
+    returned `needs_approval` and persisted a real pending request; the SDK hands
+    us its `request_id`. On ENTER we decide it as the operator
+    (POST /v1/me/approvals/{id}/decide, control-plane PAT) with scope=ALWAYS — a
+    standing grant, so one sign-off covers the agent's whole retry loop for this
+    turn (no re-ask). The kernel's ApprovalProducer reads the decision as a fact
+    on re-submit and governance re-allows; the trace records who approved + when.
+    Ctrl-C denies. If no request_id is present (older server / no operator in the
+    agent's org), we fall back to the fingerprint grant (POST /v1/govern/approve).
     """
-    tier = str(detail.get("tier", "elevated")).upper()
+    tier = str(detail.get("tier", "authenticated")).upper()
     reason = detail.get("reason", "approval required")
+    request_id = detail.get("request_id") or ""
     arg_str = ", ".join(f"{k}={v}" for k, v in args.items())
     print(f"\n  {YELLOW}⏸  {tier} APPROVAL REQUIRED{RESET}")
     print(f"     {name}({arg_str})")
@@ -97,20 +103,33 @@ def _approve(s: Settings, name: str, args: dict, detail: dict) -> bool:
     except (EOFError, KeyboardInterrupt):
         print(f"\n  {DIM}✗ denied — the action stays blocked.{RESET}")
         return False
+    headers = {"Authorization": f"Bearer {s.require_pat()}"}
     try:
-        r = httpx.post(
-            f"{s.url}/v1/govern/approve",
-            headers={"Authorization": f"Bearer {s.require_pat()}"},
-            json={"agent_id": s.agent_id, "tool": name, "args": args},
-            timeout=15,
-        )
+        if request_id:
+            r = httpx.post(
+                f"{s.url}/v1/me/approvals/{request_id}/decide",
+                headers=headers,
+                json={"decision": "approve", "scope": "always"},
+                timeout=15,
+            )
+            where = f"decided request {request_id[:8]} (scope=always)"
+        else:
+            # Fallback: no persisted request to decide — grant by fingerprint.
+            r = httpx.post(
+                f"{s.url}/v1/govern/approve",
+                headers=headers,
+                json={"agent_id": s.agent_id, "tool": name, "args": args,
+                      "scope": "always"},
+                timeout=15,
+            )
+            where = "granted by fingerprint (scope=always)"
         if r.status_code >= 400:
-            print(f"  {DIM}✗ grant failed: HTTP {r.status_code} {r.text[:120]}{RESET}")
+            print(f"  {DIM}✗ approve failed: HTTP {r.status_code} {r.text[:140]}{RESET}")
             return False
     except Exception as e:
-        print(f"  {DIM}✗ grant error: {type(e).__name__}: {e}{RESET}")
+        print(f"  {DIM}✗ approve error: {type(e).__name__}: {e}{RESET}")
         return False
-    print(f"  {GREEN}✓ approved — grant recorded; governance will re-allow on resubmit{RESET}")
+    print(f"  {GREEN}✓ approved — {where}; governance re-allows on resubmit{RESET}")
     return True
 
 

@@ -73,7 +73,7 @@ def _approval_gate(o: int, when_leaves: list[dict], *, reason: str) -> dict:
     request) and re-submits, which re-governs to allow."""
     return {"kind": "Conditional", "ordinal": o, "payload": {
         "when": {"all": list(when_leaves)},
-        "then": {"action": "require_approval", "tier": "elevated", "reason": reason}}}
+        "then": {"action": "require_approval", "tier": "authenticated", "reason": reason}}}
 
 
 def rules_for_version(n: int) -> list[dict]:

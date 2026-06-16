@@ -92,7 +92,8 @@ def main(argv: list[str] | None = None) -> int:
         kv = dict(a.split("=", 1) for a in args.arg)
         r = httpx.post(f"{s.url}/v1/govern/approve",
                        headers={"Authorization": f"Bearer {s.require_pat()}"},
-                       json={"agent_id": s.agent_id, "tool": args.tool, "args": kv},
+                       json={"agent_id": s.agent_id, "tool": args.tool, "args": kv,
+                             "scope": "always"},
                        timeout=15)
         print(f"approve {args.tool}({kv}) -> {r.status_code} {r.text[:160]}")
         return 0 if r.status_code < 400 else 1
