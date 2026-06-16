@@ -66,11 +66,38 @@ def run(version: int, prompt: str, s: Settings, max_steps: int = 6,
     print(f"# session: {session_id}")
     agent = build_agent(version, s, session_id)
     handler = VerdictHandler(governed=version >= 1)
+    _install_govern_capture(handler)
     config = {"configurable": {"thread_id": session_id},
               "callbacks": [handler],
               "recursion_limit": max_steps * 2}
     _drive(agent, prompt, config, approve_cb, handler)
     return session_id
+
+
+def _install_govern_capture(handler) -> None:
+    """Record the EXACT (tool, args) the SDK governs, onto handler.last_governed.
+
+    The reviewer must grant the same fingerprint the agent's govern call used.
+    on_tool_start gives the model's PRE-coercion args (e.g. iban as the number
+    5566), but the SDK governs the POST-coercion value the tool schema produced
+    (iban="5566"). Granting the pre-coercion args yields a different fingerprint,
+    so the grant never matches. We wrap the SDK's behavior builder to capture the
+    governed payload args verbatim, which always match the govern fingerprint.
+    """
+    import importlib
+    g = importlib.import_module("tappass.govern")
+    orig = getattr(g, "_apdemo_orig_build_tool_behavior", None) or g._build_tool_behavior
+    g._apdemo_orig_build_tool_behavior = orig
+
+    def _capture(info, args, kwargs, **kw):
+        b = orig(info, args, kwargs, **kw)
+        try:
+            handler.last_governed = (b["payload"]["tool"], dict(b["payload"]["args"]))
+        except Exception:
+            pass
+        return b
+
+    g._build_tool_behavior = _capture
 
 
 def _drive(agent, prompt: str, config: dict, approve_cb,
@@ -99,9 +126,13 @@ def _drive(agent, prompt: str, config: dict, approve_cb,
             reason = str(exc)
             if "approval" not in reason.lower() or approve_cb is None:
                 return  # hard block (verdict already printed by the handler)
-            if not handler.last_tool:
+            # Grant the EXACT args the SDK governed (post-coercion), not the
+            # model's pre-coercion on_tool_start args — else the fingerprint
+            # differs and the grant never matches.
+            governed = getattr(handler, "last_governed", None) or handler.last_tool
+            if not governed:
                 return
-            name, args = handler.last_tool
+            name, args = governed
             if not approve_cb(name, args, {"reason": reason}):
                 print("  ↳ agent halts; a reviewer approves before this runs.")
                 return
