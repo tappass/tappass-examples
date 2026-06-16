@@ -40,9 +40,11 @@ STEPS = [
      "watch": "'voldemort' → blocked; then a second run scrubs 'ACME-4471' but "
               "still lets the cow speak."},
     {"version": 3, "title": "v3 — rate-limit the tool",
-     "why": "cowsay is capped at 3 calls per 2 minutes, counted from the audit trail.",
+     "why": "cowsay is capped at 3 calls per 30 seconds for this agent, counted "
+            "from the durable audit trail.",
      "scenario": "governed",
-     "watch": "The 4th cowsay in the run is blocked — rate_limited."},
+     "watch": "The agent fires four cowsay calls one-by-one: the first three go "
+              "through, the 4th is blocked — rate_limited."},
     {"version": 4, "title": "v4 — stop data leaving",
      "why": "PII / secrets are blocked in the agent's output.",
      "scenario": "governed",

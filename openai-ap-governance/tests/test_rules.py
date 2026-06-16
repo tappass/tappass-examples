@@ -19,7 +19,7 @@ def test_v2_blocks_banned_message_and_redacts():
 
 def test_v3_adds_cowsay_rate_limit():
     rl = next(r for r in rules_for_version(3) if r["kind"] == "PerToolRateLimit")
-    assert rl["payload"] == {"tool": "cowsay", "max": 3, "window_seconds": 120}
+    assert rl["payload"] == {"tool": "cowsay", "max": 3, "window_seconds": 30}
     assert "Conditional" in _kinds(3)
 
 

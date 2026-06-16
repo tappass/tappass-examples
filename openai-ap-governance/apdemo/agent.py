@@ -49,6 +49,13 @@ def build_tools(version: int, s: Settings, session_id: str) -> list:
 def build_agent(version: int, s: Settings, session_id: str):
     model = build_model(version, s, session_id)
     tools = build_tools(version, s, session_id)
+    # Disable parallel tool-calling so the agent makes ONE tool call at a time.
+    # Otherwise the model batches several tool calls in a single turn and they
+    # are governed ~milliseconds apart in a scrambled order, so the audit trail
+    # (and the rate-limit count) shows them out of sequence. One-at-a-time keeps
+    # the governed trace in the order the model intends.
+    if tools:
+        model = model.bind_tools(tools, parallel_tool_calls=False)
     return create_agent(model, tools=tools, checkpointer=MemorySaver())
 
 
