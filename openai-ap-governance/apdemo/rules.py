@@ -51,11 +51,6 @@ def _pii_rules(o: int) -> list[dict]:
     ]
 
 
-# Approval-as-fact gate: the leaf that holds ONLY while the action is NOT yet
-# approved. Combined into a Conditional `when` so the rule blocks until a grant
-# exists, then stops firing once the operator approves the exact action.
-_UNGRANTED = {"signal": "subject.approval.granted", "op": "neq", "value": True}
-
 
 def _tool_is(tool: str) -> dict:
     return {"signal": "request.tool", "op": "eq", "value": tool}
@@ -66,14 +61,19 @@ def _and(*leaves: dict) -> list[dict]:
 
 
 def _approval_gate(o: int, when_leaves: list[dict], *, reason: str) -> dict:
-    """A Conditional that BLOCKS the action until it has been granted.
+    """A Conditional that REQUIRES human approval for the matching action.
 
-    `block when (… matching leaves … AND subject.approval.granted != true)` — the
-    SDK halts on the block, the operator grants the exact action, and the identical
-    re-submit re-governs to allow (the grant flips `subject.approval.granted`)."""
+    `require_approval when (… matching leaves …)`. The conditional compiler gates
+    the require_approval obligation on `subject.approval.granted != true`
+    automatically (and selects the ApprovalProducer), so the decision-only
+    /v1/govern returns a first-class `needs_approval` outcome + a persisted
+    pending request while ungranted (ADR 0016), then `allow` once approved. The
+    SDK raises `ApprovalPending` on needs_approval; the agent grants the exact
+    action (POST /v1/govern/approve, which idempotently approves that pending
+    request) and re-submits, which re-governs to allow."""
     return {"kind": "Conditional", "ordinal": o, "payload": {
-        "when": {"all": list(when_leaves) + [_UNGRANTED]},
-        "then": {"action": "block", "reason": reason}}}
+        "when": {"all": list(when_leaves)},
+        "then": {"action": "require_approval", "tier": "elevated", "reason": reason}}}
 
 
 def rules_for_version(n: int) -> list[dict]:
@@ -92,14 +92,11 @@ def rules_for_version(n: int) -> list[dict]:
 
     # v5: block the payment write. v6: supersede with approval. v7+: context-aware.
     #
-    # Approval is expressed as "block UNLESS already granted" — a Conditional whose
-    # `when` includes `subject.approval.granted != true`. This is deliberate, not a
-    # RequireApproval rule: the SDK's enforce path only HALTS a tool on outcome
-    # "block"; a `require_approval` obligation comes back as outcome "allow", so the
-    # tool would run ungoverned (verified live). The block-when-ungranted gate makes
-    # the SDK raise GovernanceBlocked, the operator grants the exact action
-    # (POST /v1/govern/approve → approval-as-fact), and the identical re-submitted
-    # call re-governs to allow (the ApprovalProducer supplies granted=true).
+    # Approval is a `require_approval` Conditional (ADR 0016): the decision-only
+    # /v1/govern returns a first-class `needs_approval` outcome + a persisted
+    # pending request while ungranted; the SDK raises `ApprovalPending`; a reviewer
+    # approves; the identical re-submit re-governs to `allow`. The conditional
+    # compiler suppresses the obligation once `subject.approval.granted` is true.
     if n == 5:
         rules.append({"kind": "BlockTool", "ordinal": 5,
                       "payload": {"tools": ["schedule_payment"]}})

@@ -40,7 +40,11 @@ def test_model_routing(monkeypatch):
 
 
 # ── approve-and-resume orchestration (_drive) ────────────────────────────────
-from tappass._govern_call import GovernanceBlocked  # noqa: E402
+from tappass._govern_call import ApprovalPending, GovernanceBlocked  # noqa: E402
+
+
+def _pending(rid="req-1"):
+    return ApprovalPending(request_id=rid, reason="payment needs sign-off")
 
 
 class _FakeAgent:
@@ -63,7 +67,8 @@ def _handler(name="schedule_payment", args=None):
 
 
 def test_drive_grants_exact_action_then_resumes():
-    agent = _FakeAgent([GovernanceBlocked("approval required: pay"), None])
+    # ADR 0016: needs_approval surfaces as ApprovalPending; approve + re-run.
+    agent = _FakeAgent([_pending(), None])
     grant = {}
     def approve_cb(name, args, detail):
         grant["call"] = (name, args); return True
@@ -73,15 +78,16 @@ def test_drive_grants_exact_action_then_resumes():
 
 
 def test_drive_halts_when_reviewer_declines():
-    agent = _FakeAgent([GovernanceBlocked("approval required")])
+    agent = _FakeAgent([_pending()])
     A._drive(agent, "pay", {}, lambda *a: False, _handler())
     assert agent.invokes == 1                        # no resume on decline
 
 
 def test_drive_does_not_grant_on_a_hard_block():
+    # A hard denial (GovernanceBlocked) is NOT an approval — never grant, never resume.
     agent = _FakeAgent([GovernanceBlocked("blocked_tool: schedule_payment")])
     granted = {"n": 0}
     def approve_cb(*a):
         granted["n"] += 1; return True
     A._drive(agent, "pay", {}, approve_cb, _handler())
-    assert agent.invokes == 1 and granted["n"] == 0  # non-approval block → no grant
+    assert agent.invokes == 1 and granted["n"] == 0  # denial → no grant

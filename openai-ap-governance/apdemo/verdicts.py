@@ -13,7 +13,12 @@ GREEN = "\033[32m"; RED = "\033[31m"; YELLOW = "\033[33m"; DIM = "\033[2m"; RESE
 
 
 def classify_error(message: str) -> tuple[str, str]:
-    """Map a GovernanceBlocked message to (label, human_reason)."""
+    """Map a GovernanceBlocked / ApprovalPending message to (label, human_reason)."""
+    low = message.lower()
+    # ADR 0016: ApprovalPending → "approval pending: request_id=… (reason)".
+    if "approval pending" in low or "needs_approval" in low:
+        reason = message.split("(", 1)[1].rstrip(")") if "(" in message else "human approval required"
+        return "APPROVAL REQUIRED", reason
     msg = message.split("governance block:", 1)[-1].strip() or message
     low = msg.lower()
     if "approval" in low:

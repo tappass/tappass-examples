@@ -247,3 +247,18 @@ All approval beats HALT correctly (block + "approval required" reason); the SDK 
 grants the exact action + re-invokes. Full in-run RESUME (re-submit → allow) completes
 once PR #751 (cross-org grant scoping) deploys — verified locally that GovernanceBlocked
 propagates out of create_agent.invoke and the grant records.
+
+### Demo rewired onto ADR 0016 needs_approval (2026-06-16, prod v0.9.6)
+v6/v7/v8 approval rules switched from the block-when-ungranted hack to native
+`require_approval` Conditionals (the compiler auto-gates them on
+`subject.approval.granted`). Decision-only /v1/govern now returns a first-class
+`needs_approval` + a persisted pending request (request_id); the SDK raises
+`ApprovalPending` (not GovernanceBlocked); `_drive` catches it, approves the exact
+governed action via /v1/govern/approve (which idempotently approves THAT pending
+request — now dashboard-visible), and re-submits → allow. Verified live end-to-end
+via the agent: v6 (€808), v7 (€15015 over-threshold), v8 (schema) all
+halt→approve→resume→execute. The verdict×scope ledger (once/always/deny/revoke) +
+migration 108 are deployed (v0.9.6). Known: the human-`/decide`-an-agent-request
+path 404s (agent-created request has requester=nil, approver=self) — slice-1
+follow-up; the operator-grant path works. Minor: v7 multi-attempt agent loop is
+occasionally flaky (re-asks); clean runs + raw probe resume fine.

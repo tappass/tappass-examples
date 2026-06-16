@@ -104,15 +104,16 @@ def _drive(agent, prompt: str, config: dict, approve_cb,
            handler: VerdictHandler, max_resumes: int = 3) -> None:
     """Run the agent, driving the approve-and-resume loop.
 
-    Under ``tappass.govern(mode="enforce")`` a gated tool call raises
-    ``GovernanceBlocked`` from inside the tool, which propagates out of
-    ``agent.invoke`` (verified — LangGraph does not swallow it). When the block
-    is an approval gate and a reviewer hook is present, we grant the EXACT action
-    the agent just attempted (captured by the handler) and re-invoke on the same
-    thread so the identical call re-governs to allow (approval-as-fact). A
-    non-approval block, a declined approval, or no hook → surface and stop.
+    Under ``tappass.govern(mode="enforce")`` a gated tool call raises from inside
+    the tool, which propagates out of ``agent.invoke`` (LangGraph does not swallow
+    it). ADR 0016: a require-approval gate raises ``ApprovalPending`` (the server
+    returned ``needs_approval`` + a persisted request); a hard denial raises
+    ``GovernanceBlocked``. On ApprovalPending with a reviewer hook, we approve the
+    EXACT action the agent attempted (captured by the handler) and re-run on a
+    FRESH thread so the identical call re-governs to allow. A denial, a declined
+    approval, or no hook → surface and stop.
     """
-    from tappass._govern_call import GovernanceBlocked
+    from tappass._govern_call import ApprovalPending, GovernanceBlocked
 
     messages = {"messages": [("system", SYSTEM), ("user", prompt)]}
     base_thread = (config.get("configurable") or {}).get("thread_id", "t")
@@ -122,26 +123,27 @@ def _drive(agent, prompt: str, config: dict, approve_cb,
             result = agent.invoke(messages, cfg)
             print(f"\n[ASSISTANT] {getattr(result['messages'][-1], 'content', result)}")
             return
-        except GovernanceBlocked as exc:
-            reason = str(exc)
-            if "approval" not in reason.lower() or approve_cb is None:
-                return  # hard block (verdict already printed by the handler)
-            # Grant the EXACT args the SDK governed (post-coercion), not the
+        except GovernanceBlocked:
+            return  # hard denial (verdict already printed by the handler)
+        except ApprovalPending as exc:
+            if approve_cb is None:
+                print("  ↳ agent halts; a reviewer approves before this runs.")
+                return
+            # Approve the EXACT args the SDK governed (post-coercion), not the
             # model's pre-coercion on_tool_start args — else the fingerprint
             # differs and the grant never matches.
             governed = getattr(handler, "last_governed", None) or handler.last_tool
             if not governed:
                 return
             name, args = governed
-            if not approve_cb(name, args, {"reason": reason}):
+            detail = {"reason": str(exc), "request_id": getattr(exc, "request_id", "")}
+            if not approve_cb(name, args, detail):
                 print("  ↳ agent halts; a reviewer approves before this runs.")
                 return
-            # Resume on a FRESH thread with the original prompt. When the tool
-            # raised GovernanceBlocked, the checkpoint kept the assistant turn's
-            # dangling tool_call with no tool result; continuing that thread sends
-            # an invalid message sequence to the model ("Invalid request format").
-            # A fresh thread re-plans and re-issues the now-granted (single-use)
-            # call cleanly, which re-governs to allow.
+            # Resume on a FRESH thread with the original prompt. The blocked turn's
+            # checkpoint holds a dangling tool_call (no tool result); continuing it
+            # sends an invalid message sequence to the model. A fresh thread re-plans
+            # and re-issues the now-approved call, which re-governs to allow.
             cfg = {**config, "configurable": {**(config.get("configurable") or {}),
                                               "thread_id": f"{base_thread}-r{attempt + 1}"}}
     print("\n[done: approval retries exhausted]")

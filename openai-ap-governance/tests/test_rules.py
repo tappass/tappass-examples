@@ -33,35 +33,31 @@ def test_v5_blocks_payment_write():
 
 
 def _approval_gates(n):
-    """Conditionals that block until granted (when includes subject.approval.granted)."""
-    out = []
-    for r in rules_for_version(n):
-        if r["kind"] != "Conditional":
-            continue
-        leaves = r["payload"]["when"].get("all", [r["payload"]["when"]])
-        if any(l.get("signal") == "subject.approval.granted" for l in leaves):
-            out.append(r)
-    return out
+    """Conditionals whose action is require_approval (ADR 0016 → needs_approval)."""
+    return [r for r in rules_for_version(n)
+            if r["kind"] == "Conditional"
+            and r["payload"]["then"].get("action") == "require_approval"]
 
 
-def test_v6_payment_needs_approval_via_block_until_granted():
-    # Path B: approval is a block-when-ungranted Conditional, NOT a RequireApproval
-    # obligation (which the SDK enforce path does not halt on). No blanket BlockTool.
+def test_v6_payment_needs_approval_via_require_approval():
+    # ADR 0016: approval is a require_approval Conditional → the decision-only
+    # /v1/govern returns needs_approval. No block-hack, no blanket BlockTool.
     rs = rules_for_version(6)
-    assert not any(r["kind"] == "RequireApproval" for r in rs)
     assert not any(r["kind"] == "BlockTool" for r in rs)
     gates = _approval_gates(6)
     assert len(gates) == 1
     g = gates[0]
-    assert g["payload"]["then"]["action"] == "block"
-    assert "approval required" in g["payload"]["then"]["reason"]
+    assert g["payload"]["then"]["action"] == "require_approval"
+    assert g["payload"]["then"]["tier"] and "approval required" in g["payload"]["then"]["reason"]
     leaves = g["payload"]["when"]["all"]
     assert {"signal": "request.tool", "op": "eq", "value": "schedule_payment"} in leaves
+    # the compiler auto-gates require_approval on subject.approval.granted — the rule
+    # itself must NOT carry an explicit granted leaf.
+    assert not any(l.get("signal") == "subject.approval.granted" for l in leaves)
 
 
 def test_v7_is_context_aware():
-    # Bank-change always gated; payment gated only over the threshold — both as
-    # block-until-granted Conditionals.
+    # Bank-change always needs approval; payment only over the threshold.
     gates = _approval_gates(7)
     tools = set()
     for g in gates:
@@ -69,7 +65,6 @@ def test_v7_is_context_aware():
             if l.get("signal") == "request.tool":
                 tools.add(l["value"])
     assert {"update_vendor_bank_details", "schedule_payment"} <= tools
-    # the payment gate carries the amount threshold
     assert any(any(l.get("signal") == "request.tool_args.amount" and l["op"] == "gt"
                    for l in g["payload"]["when"]["all"]) for g in gates)
 
