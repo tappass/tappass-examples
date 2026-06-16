@@ -1,11 +1,187 @@
 {
   "agent_id": "collibra-ap-demo",
   "summary": {
-    "blocked": 25,
-    "approved": 19,
-    "allowed": 64
+    "blocked": 27,
+    "approved": 22,
+    "allowed": 56
   },
   "decisions": [
+    {
+      "when": "2026-06-16T20:51:14.660262+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "set_asset_classification",
+      "decision": "approved",
+      "rule": "",
+      "approved_by": "de75f783-13ed-4f41-b29a-505a9c9883f0",
+      "approved_at": "2026-06-16T20:51:13.107602+00:00",
+      "session_id": "apdemo-v9-71a4a98a",
+      "control": "EU AI Act Art. 14 (human-in-the-loop) \u2014 steward sign-off recorded"
+    },
+    {
+      "when": "2026-06-16T20:51:12.834318+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "set_asset_classification",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v9-71a4a98a",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:51:10.931621+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "set_asset_classification",
+      "decision": "blocked",
+      "rule": "agent may not weaken a data classification",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v8-78b57811",
+      "control": "EU AI Act Art. 14 (human oversight) \u00b7 GDPR Art. 5 (integrity)"
+    },
+    {
+      "when": "2026-06-16T20:51:07.758811+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "schedule_payment",
+      "decision": "approved",
+      "rule": "",
+      "approved_by": "de75f783-13ed-4f41-b29a-505a9c9883f0",
+      "approved_at": "2026-06-16T20:51:06.238932+00:00",
+      "session_id": "apdemo-v7-17173254",
+      "control": "EU AI Act Art. 14 (human-in-the-loop) \u2014 steward sign-off recorded"
+    },
+    {
+      "when": "2026-06-16T20:51:05.908529+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "schedule_payment",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v7-17173254",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:51:02.757635+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "schedule_payment",
+      "decision": "approved",
+      "rule": "",
+      "approved_by": "de75f783-13ed-4f41-b29a-505a9c9883f0",
+      "approved_at": "2026-06-16T20:51:00.871607+00:00",
+      "session_id": "apdemo-v6-b0931559",
+      "control": "EU AI Act Art. 14 (human-in-the-loop) \u2014 steward sign-off recorded"
+    },
+    {
+      "when": "2026-06-16T20:51:00.604141+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "schedule_payment",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v6-b0931559",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:50:58.298011+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "schedule_payment",
+      "decision": "blocked",
+      "rule": "blocked_tool:schedule_payment",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v5-c8b585e5",
+      "control": "EU AI Act Art. 14 (human oversight) \u00b7 GDPR Art. 5 (integrity)"
+    },
+    {
+      "when": "2026-06-16T20:50:54.620787+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "lookup_vendor",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v4-12c29655",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:50:52.231798+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "send_reminder",
+      "decision": "blocked",
+      "rule": "per_tool_rate_limit_exceeded:send_reminder",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v3-92016d81",
+      "control": "EU AI Act Art. 14 (human oversight) \u00b7 GDPR Art. 5 (integrity)"
+    },
+    {
+      "when": "2026-06-16T20:50:48.233322+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "send_reminder",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v3-92016d81",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:50:44.023864+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "send_reminder",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v3-92016d81",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:50:40.052119+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "send_reminder",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v3-92016d81",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:50:01.197520+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "cowsay",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v2-23b65944",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
+    {
+      "when": "2026-06-16T20:49:59.377749+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "cowsay",
+      "decision": "blocked",
+      "rule": "the cow may not say that",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v2-c554ff47",
+      "control": "EU AI Act Art. 14 (human oversight) \u00b7 GDPR Art. 5 (integrity)"
+    },
+    {
+      "when": "2026-06-16T20:49:54.766653+00:00",
+      "agent": "collibra-ap-demo",
+      "action": "cowsay",
+      "decision": "allowed",
+      "rule": "",
+      "approved_by": null,
+      "approved_at": null,
+      "session_id": "apdemo-v1-ff6fb19f",
+      "control": "Observed + audited (least-privilege baseline)"
+    },
     {
       "when": "2026-06-16T20:26:09.178202+00:00",
       "agent": "collibra-ap-demo",
@@ -983,215 +1159,6 @@
       "approved_by": null,
       "approved_at": null,
       "session_id": "apdemo-v2-81189d90",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:49:55.676305+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v2-d85e703d",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:49:55.503086+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-b78824df",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:49:14.329330+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v1-33d483b8",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:49:14.001703+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v2-81189d90",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:49:13.831513+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v2-d85e703d",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:49:12.086944+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "blocked",
-      "rule": "the cow may not say that",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v2-81189d90",
-      "control": "EU AI Act Art. 14 (human oversight) \u00b7 GDPR Art. 5 (integrity)"
-    },
-    {
-      "when": "2026-06-16T16:49:05.430763+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v1-33d483b8",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:47:06.176221+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "blocked",
-      "rule": "per_tool_rate_limit_exceeded:cowsay",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-81ee1324",
-      "control": "EU AI Act Art. 14 (human oversight) \u00b7 GDPR Art. 5 (integrity)"
-    },
-    {
-      "when": "2026-06-16T16:47:01.909135+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-81ee1324",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:46:55.823830+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-81ee1324",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T16:46:51.350898+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-81ee1324",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:34:02.717232+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-b8549ba6",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:34:02.714024+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-b8549ba6",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:34:02.709618+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-b8549ba6",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:34:02.705239+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-b8549ba6",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:31:25.898297+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-e90bd144",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:31:25.884439+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-e90bd144",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:31:25.884068+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-e90bd144",
-      "control": "Observed + audited (least-privilege baseline)"
-    },
-    {
-      "when": "2026-06-16T15:31:25.877398+00:00",
-      "agent": "collibra-ap-demo",
-      "action": "cowsay",
-      "decision": "allowed",
-      "rule": "",
-      "approved_by": null,
-      "approved_at": null,
-      "session_id": "apdemo-v3-e90bd144",
       "control": "Observed + audited (least-privilege baseline)"
     }
   ]

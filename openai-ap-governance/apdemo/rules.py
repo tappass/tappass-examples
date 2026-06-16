@@ -29,6 +29,9 @@ _REDACT_PATTERN = r"[A-Z]{2,}-[A-Z0-9]{3,}"
 _RATE_TOOL, _RATE_MAX, _RATE_WINDOW_S = "send_reminder", 3, 30
 # v7 — payment threshold
 _PAYMENT_THRESHOLD = 10000  # EUR
+# v11 — the sanctioned model PII is routed to (stand-in for an EU / on-prem
+# model). The point is the ROUTING, driven by detected PII — not this id.
+_APPROVED_MODEL = "gpt-4o"
 
 
 def _cowsay_rules(o: int) -> list[dict]:
@@ -127,17 +130,35 @@ def rules_for_version(n: int) -> list[dict]:
             _tool_is("propose_schema_change")),
             reason="approval required: catalog schema change (elevated)"))
 
-    # v9 — Collibra catalog stewardship: a sensitive reclassification (to
-    # confidential / restricted) requires a DATA STEWARD's sign-off. Weakening a
-    # classification is still blocked outright (v8); strengthening or applying a
-    # sensitive label is allowed but only with human approval — so an agent can
-    # propose catalog metadata changes, but a steward owns the decision.
+    # v9 — the catalog DRIVES enforcement (Collibra → TapPass at runtime). The
+    # agent may not EXPORT an asset the catalog classifies as Restricted; the
+    # blocked-asset list is derived from the catalog itself. Classify once in
+    # Collibra → enforced on every agent, at the moment it tries to move the data.
     if n >= 9:
-        rules.append(_approval_gate(9, _and(
-            _tool_is("set_asset_classification"),
-            {"signal": "request.tool_args.classification", "op": "in",
-             "value": ["confidential", "restricted"]}),
-            reason="approval required: a data steward must sign off on a sensitive reclassification"))
+        from . import catalog
+        rules.append({"kind": "Conditional", "ordinal": 9, "payload": {
+            "when": {"all": [
+                {"signal": "request.tool", "op": "eq", "value": "export_asset"},
+                {"signal": "request.tool_args.asset_id", "op": "in",
+                 "value": catalog.restricted_asset_ids()}]},
+            "then": {"action": "block",
+                     "reason": "asset is classified Restricted in the catalog — agents may not export it"}}})
+
+    # v10 — prompt injection: untrusted content trying to hijack the agent
+    # (instruction-override, jailbreak, exfil) is detected and blocked before the
+    # model acts on it. findings.injection_score comes from the kernel detector.
+    if n >= 10:
+        rules.append({"kind": "Conditional", "ordinal": 10, "payload": {
+            "when": {"signal": "findings.injection_score", "op": "gt", "value": 0.8},
+            "then": {"action": "block", "reason": "prompt injection detected"}}})
+
+    # v11 — data residency: a prompt carrying PII is ROUTED to the approved model
+    # instead of the default one, so sensitive data never reaches an unsanctioned
+    # (e.g. non-EU) model. route_to_model is honored by the gateway at runtime.
+    if n >= 11:
+        rules.append({"kind": "Conditional", "ordinal": 11, "payload": {
+            "when": {"signal": "findings.pii", "op": "count_gt", "value": 0},
+            "then": {"action": "route_to_model", "model": _APPROVED_MODEL}}})
     return rules
 
 
@@ -151,6 +172,8 @@ def change_note(n: int) -> str:
         6: "v6: human approval on payments (escalate → approve → resume)",
         7: "v7: context-aware — bank changes + over-threshold payments need approval",
         8: "v8: govern the catalog — block classification weakening; approve schema changes",
-        9: "v9: catalog stewardship — a data steward must approve a sensitive reclassification",
+        9: "v9: the catalog governs the agent — block export of a Restricted asset",
+        10: "v10: block prompt injection — untrusted content can't hijack the agent",
+        11: "v11: data residency — route PII prompts to the approved model",
     }
     return notes[n]

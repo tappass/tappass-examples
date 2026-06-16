@@ -49,3 +49,10 @@ def get_invoice(invoice_id: str) -> dict | None:
 
 def get_asset(asset_id: str) -> dict | None:
     return ASSETS.get(asset_id)
+
+
+def restricted_asset_ids() -> list[str]:
+    """Asset ids the catalog classifies as Restricted — the source the v9 policy
+    enforces on. Classify once in the catalog (Collibra); TapPass blocks the
+    agent from exporting those at runtime."""
+    return sorted(a["id"] for a in ASSETS.values() if a.get("classification") == "restricted")

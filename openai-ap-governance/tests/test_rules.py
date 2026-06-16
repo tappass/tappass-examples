@@ -75,16 +75,37 @@ def test_v8_governs_catalog():
                for r in rs if r["kind"] == "Conditional")
 
 
-def test_change_notes_cover_1_to_9():
-    for n in range(1, 10):
+def test_change_notes_cover_1_to_11():
+    for n in range(1, 12):
         assert change_note(n)
 
 
-def test_v9_reclassification_needs_steward_approval():
-    gates = _approval_gates(9)
-    g = next(g for g in gates
-             if {"signal": "request.tool", "op": "eq", "value": "set_asset_classification"}
-             in g["payload"]["when"]["all"])
-    leaves = g["payload"]["when"]["all"]
-    assert any(l.get("signal") == "request.tool_args.classification" and l["op"] == "in"
-               and "confidential" in l["value"] for l in leaves)
+def _conds(n):
+    return [r for r in rules_for_version(n) if r["kind"] == "Conditional"]
+
+
+def test_v9_blocks_export_of_restricted_asset():
+    # The block list is derived from the catalog's Restricted classifications.
+    from apdemo import catalog
+    g = next(r for r in _conds(9)
+             if {"signal": "request.tool", "op": "eq", "value": "export_asset"}
+             in r["payload"]["when"].get("all", []))
+    assert g["payload"]["then"]["action"] == "block"
+    leaf = next(l for l in g["payload"]["when"]["all"]
+                if l.get("signal") == "request.tool_args.asset_id")
+    assert leaf["op"] == "in" and leaf["value"] == catalog.restricted_asset_ids()
+    assert "vendor_bank_accounts" in leaf["value"]
+
+
+def test_v10_blocks_prompt_injection():
+    g = next(r for r in _conds(10)
+             if r["payload"]["when"].get("signal") == "findings.injection_score")
+    assert g["payload"]["when"]["op"] == "gt"
+    assert g["payload"]["then"]["action"] == "block"
+
+
+def test_v11_routes_pii_to_approved_model():
+    g = next(r for r in _conds(11)
+             if r["payload"]["when"].get("signal") == "findings.pii")
+    then = g["payload"]["then"]
+    assert then["action"] == "route_to_model" and then.get("model")

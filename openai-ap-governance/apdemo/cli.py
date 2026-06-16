@@ -22,11 +22,11 @@ def main(argv: list[str] | None = None) -> int:
 
     a = sub.add_parser(
         "activate",
-        help="create+publish+assign policy posture N (1..9) — one forward step")
-    a.add_argument("--version", type=int, required=True, choices=range(1, 10))
+        help="create+publish+assign policy posture N (1..11) — one forward step")
+    a.add_argument("--version", type=int, required=True, choices=range(1, 12))
 
-    r = sub.add_parser("run", help="run the agent at version N (0..9)")
-    r.add_argument("--version", type=int, required=True, choices=range(0, 10))
+    r = sub.add_parser("run", help="run the agent at version N (0..11)")
+    r.add_argument("--version", type=int, required=True, choices=range(0, 12))
     r.add_argument("--scenario", choices=["happy", "governed", "long"],
                    default="happy")
     r.add_argument("--prompt", default=None)
@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="show active policy + assignment")
     sub.add_parser("evidence",
                    help="compliance evidence report (governed decisions + approvals)")
+    sub.add_parser("route-demo",
+                   help="data residency: route PII prompts to the approved model")
     sub.add_parser("teardown", help="remove the demo agent + policy")
 
     ap = sub.add_parser(
@@ -92,6 +94,12 @@ def main(argv: list[str] | None = None) -> int:
         from .evidence import report
         s = ensure_live(s)
         report(s)
+        return 0
+
+    if args.cmd == "route-demo":
+        from .routing import route_demo
+        s = ensure_live(s)
+        route_demo(s)
         return 0
 
     if args.cmd == "approve":

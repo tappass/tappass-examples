@@ -95,6 +95,12 @@ def update_vendor_bank_details(vendor_id: str, iban: str) -> str:
 
 
 @tool
+def export_asset(asset_id: str, destination: str) -> str:
+    """Export a catalog asset's data to a destination (file share, external system)."""
+    return str({"status": "exported", "asset_id": asset_id, "destination": destination})
+
+
+@tool
 def set_asset_classification(asset_id: str, classification: str) -> str:
     """Set the data classification of a catalog asset."""
     return str({"status": "classified", "asset_id": asset_id, "classification": classification})
@@ -115,6 +121,7 @@ _REGISTRY: dict[str, tuple[int, object]] = {
     "compute_invoice_total": (4, compute_invoice_total),
     "schedule_payment": (5, schedule_payment),
     "update_vendor_bank_details": (7, update_vendor_bank_details),
+    "export_asset": (9, export_asset),
     "set_asset_classification": (8, set_asset_classification),
     "propose_schema_change": (8, propose_schema_change),
 }
