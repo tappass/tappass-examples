@@ -26,15 +26,24 @@ SYSTEM = ("You are an Accounts Payable assistant. Use tools when needed. "
           "Make ONE tool call at a time and report what happened for each.")
 
 
+# Make the agent call ONE tool at a time. Passed via model_kwargs so it rides on
+# every request and SURVIVES create_agent's internal bind_tools (binding it on
+# the model directly does not — create_agent re-binds and drops it). Parallel
+# tool batches are otherwise governed ~ms apart in a scrambled order, so the
+# audit trail / rate-limit count read out of sequence.
+_NO_PARALLEL = {"parallel_tool_calls": False}
+
+
 def build_model(version: int, s: Settings, session_id: str) -> ChatOpenAI:
     if version == 0:
         if not s.openai_api_key:
             raise SystemExit("v0 needs OPENAI_API_KEY (direct OpenAI).")
         return ChatOpenAI(model=s.model, base_url="https://api.openai.com/v1",
-                          api_key=s.openai_api_key)
+                          api_key=s.openai_api_key, model_kwargs=dict(_NO_PARALLEL))
     return ChatOpenAI(model=s.model, base_url=f"{s.url}/v1",
                       api_key=s.require_agent_key(),
-                      default_headers={"X-Session-Id": session_id})
+                      default_headers={"X-Session-Id": session_id},
+                      model_kwargs=dict(_NO_PARALLEL))
 
 
 def build_tools(version: int, s: Settings, session_id: str) -> list:
@@ -47,15 +56,8 @@ def build_tools(version: int, s: Settings, session_id: str) -> list:
 
 
 def build_agent(version: int, s: Settings, session_id: str):
-    model = build_model(version, s, session_id)
+    model = build_model(version, s, session_id)   # parallel disabled via model_kwargs
     tools = build_tools(version, s, session_id)
-    # Disable parallel tool-calling so the agent makes ONE tool call at a time.
-    # Otherwise the model batches several tool calls in a single turn and they
-    # are governed ~milliseconds apart in a scrambled order, so the audit trail
-    # (and the rate-limit count) shows them out of sequence. One-at-a-time keeps
-    # the governed trace in the order the model intends.
-    if tools:
-        model = model.bind_tools(tools, parallel_tool_calls=False)
     return create_agent(model, tools=tools, checkpointer=MemorySaver())
 
 

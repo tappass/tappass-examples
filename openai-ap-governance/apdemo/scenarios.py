@@ -46,7 +46,34 @@ LONG_PROMPT = (
 )
 
 
+import os as _os
+
+# A per-process-stable salt so each `apdemo guide` invocation uses a UNIQUE
+# payment amount. Approvals are keyed by the action fingerprint (agent + tool +
+# args); a fixed amount means every run reuses the SAME pending-approval row, so
+# a prior run's decided/standing grant collides with this run ("409 already
+# approved", or the beat silently auto-allows). A unique amount per run gives a
+# fresh fingerprint → a clean approve-and-resume every time. The offsets keep
+# the semantics: v6 stays a normal payment; v7 stays over the €10k threshold.
+_RUN_SALT = int.from_bytes(_os.urandom(2), "big") % 900  # 0–899, stable per process
+
+
+def _payment_prompt(version: int) -> str | None:
+    """The governed payment prompt for v5–v7 with a run-unique amount, or None."""
+    if version == 5:                       # blocked outright — amount cosmetic
+        return f"Schedule a payment of {4500 + _RUN_SALT} euro to vendor V-1001."
+    if version == 6:                       # any payment needs approval
+        return f"Schedule a payment of {4500 + _RUN_SALT} euro to vendor V-1001."
+    if version == 7:                       # only > €10k needs approval
+        return f"Schedule a payment of {25000 + _RUN_SALT} euro to vendor V-1001."
+    return None
+
+
 def prompt_for(version: int, mode: str) -> str:
     if mode == "long":
         return LONG_PROMPT
+    if mode == "governed":
+        payment = _payment_prompt(version)
+        if payment is not None:
+            return payment
     return SCENARIOS[version][mode]

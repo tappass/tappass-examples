@@ -13,7 +13,7 @@ import httpx
 
 from . import agent as agent_mod
 from .config import Settings
-from .provision import ControlPlane, _writeback_env
+from .provision import ControlPlane
 from .rules import change_note
 from .scenarios import V2_REDACT_PROMPT, prompt_for
 
@@ -125,6 +125,11 @@ def _approve(s: Settings, name: str, args: dict, detail: dict) -> bool:
                 timeout=15,
             )
             where = "granted by fingerprint (scope=always)"
+        if r.status_code == 409:
+            # Already decided (e.g. a standing grant from a prior identical
+            # action). The action IS authorised — proceed to resume.
+            print(f"  {GREEN}✓ already approved — governance re-allows on resubmit{RESET}")
+            return True
         if r.status_code >= 400:
             print(f"  {DIM}✗ approve failed: HTTP {r.status_code} {r.text[:140]}{RESET}")
             return False
@@ -142,17 +147,13 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
 
     policy_id = s.policy_id
     if fresh:
-        # Re-runnable from a pristine starting point: neutralise the current
-        # policy (so its assignment stops governing the agent), then mint a
-        # brand-new policy whose version history starts clean at v1.
-        print(f"{DIM}Resetting to a fresh policy…{RESET}")
-        cp.neutralize(s.policy_id)
-        # Policy ops need the org SLUG (TAPPASS_ORG); the agent reports a UUID.
-        org = s.org or cp.agent_org(s.agent_id) or ""
-        policy_id, policy_name = cp.create_policy("AP Demo Policy", org_id=org)
-        # Persist the fresh policy so later runs REUSE it (clean + no new bloat).
-        _writeback_env({"TAPPASS_POLICY_ID": policy_id})
-        print(f"{GREEN}✓ fresh policy '{policy_name}' ({policy_id}){RESET}")
+        # Re-runnable from a pristine starting point — WITHOUT minting a new
+        # policy. Minting (the old behaviour) left the previous policy assigned
+        # and composing, stacking a new one every run (the cross-policy mix-up).
+        # Instead we reuse the ONE demo policy: the v0→v8 walk republishes its
+        # versions, so re-activating from v1 IS the reset. Governance stays on a
+        # single policy; only the internal version_no climbs (harmless).
+        print(f"{DIM}Resetting to v0 on the demo policy (single-policy, no stacking)…{RESET}")
 
     policy_url = f"{s.url}/app/policies/{policy_id}"
     agent_url = f"{s.url}/app/agents/{s.agent_uuid}"

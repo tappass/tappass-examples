@@ -174,14 +174,36 @@ class ControlPlane:
         return self._post(f"/api/v2/policies/{policy_id}/assignments",
                           assignment_body(agent_uuid=agent_uuid))
 
+    def agent_policy_ids(self, agent_uuid: str) -> set[str]:
+        """Policy ids already composing on this agent — the dedup guard that
+        keeps the demo on EXACTLY ONE policy. Assigning the same policy twice,
+        or different demo policies across runs, stacks them (they all compose),
+        which is what caused the v3/v4/v6 cross-policy mix-ups."""
+        try:
+            data = self._get(f"/api/v2/policies/agents/{agent_uuid}/assignments")
+        except SystemExit:
+            return set()
+        rows = data.get("data", []) if isinstance(data, dict) else (data or [])
+        return {r.get("policy_id") for r in rows
+                if isinstance(r, dict) and r.get("policy_id")}
+
+    def assign_once(self, policy_id: str, agent_uuid: str) -> None:
+        """Assign only if this policy isn't already composing — never stack."""
+        if policy_id not in self.agent_policy_ids(agent_uuid):
+            try:
+                self.assign(policy_id, agent_uuid)
+            except SystemExit:
+                pass
+
     def activate(self, policy_id: str, n: int, agent_uuid: str) -> int:
         """One forward step: create version N's rules as a fresh draft, publish
-        it (new active version, retiring the prior), and assign to the agent so
-        the assignment pins this version. Returns the server version_no.
+        it (new active version, retiring the prior), and ensure the policy is
+        assigned (once) so the assignment pins this version. Returns the server
+        version_no.
         """
         version_no = self.create_version(policy_id, n)
         self.publish(policy_id, version_no)
-        self.assign(policy_id, agent_uuid)
+        self.assign_once(policy_id, agent_uuid)
         return version_no
 
     def pull_back(self, policy_id: str, version_no: int) -> dict:
@@ -303,20 +325,17 @@ def ensure_live(settings: Settings, *, policy_name: str = DEMO_POLICY_NAME) -> S
         else:
             agent_key = cp._mint_key(agent_uuid)      # re-keyed / missing → mint
 
-    # Reuse the ONE dedicated clean policy by name (create it once). We do NOT
-    # trust the configured id — on this tenant it points at a bloated/broken
-    # legacy policy; the named lookup keeps the demo on a single pristine policy.
-    policy_id = cp.find_policy(org, policy_name)
-    if not policy_id:
+    # Use the ONE configured demo policy (the .env id). We deliberately do NOT
+    # find-by-name: that re-attaches a *different* demo policy every run and
+    # STACKS them on the agent (they all compose → cross-policy mix-ups). Create
+    # one only if the configured id is missing/gone.
+    policy_id = settings.policy_id
+    if not policy_id or not cp.policy_exists(policy_id):
         policy_id, _ = cp.create_policy(policy_name, org_id=org)
 
-    # Re-point the policy's assignment at the LIVE agent uuid every run. Without
-    # this, a re-keyed agent leaves a stale assignment and publish/compose 422s
-    # ("agent not found") — the exact failure the bloated demo policy hit.
-    try:
-        cp.assign(policy_id, agent_uuid)
-    except SystemExit:
-        pass
+    # Assign once — skip if it's already composing, so we never stack duplicate
+    # or competing assignments on the agent.
+    cp.assign_once(policy_id, agent_uuid)
 
     live = dataclasses.replace(
         settings, agent_uuid=agent_uuid, agent_key=agent_key, policy_id=policy_id)
