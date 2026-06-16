@@ -121,8 +121,17 @@ _REGISTRY: dict[str, tuple[int, object]] = {
 
 
 def tools_for_version(n: int) -> list:
-    """The raw @tool objects unlocked at version n (additive)."""
-    return [t for _name, (min_ver, t) in _REGISTRY.items() if min_ver <= n]
+    """FRESH @tool objects unlocked at version n (additive).
+
+    Returns deep copies, never the module-level singletons. ``tappass.govern``
+    wraps a tool IN-PLACE (setattr on its hook attr), so handing it the shared
+    object every beat would STACK govern wrappers — by v7 a payment tool carries
+    v5+v6+v7 wrappers and one invocation fires three govern calls, each tagged
+    with its beat's session_id (the cross-session trace bleed). A fresh copy per
+    build means each beat governs its own tool exactly once.
+    """
+    import copy
+    return [copy.deepcopy(t) for _name, (min_ver, t) in _REGISTRY.items() if min_ver <= n]
 
 
 def dispatch(name: str, args: dict) -> str:
