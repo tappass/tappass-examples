@@ -126,6 +126,18 @@ def rules_for_version(n: int) -> list[dict]:
         rules.append(_approval_gate(8, _and(
             _tool_is("propose_schema_change")),
             reason="approval required: catalog schema change (elevated)"))
+
+    # v9 — Collibra catalog stewardship: a sensitive reclassification (to
+    # confidential / restricted) requires a DATA STEWARD's sign-off. Weakening a
+    # classification is still blocked outright (v8); strengthening or applying a
+    # sensitive label is allowed but only with human approval — so an agent can
+    # propose catalog metadata changes, but a steward owns the decision.
+    if n >= 9:
+        rules.append(_approval_gate(9, _and(
+            _tool_is("set_asset_classification"),
+            {"signal": "request.tool_args.classification", "op": "in",
+             "value": ["confidential", "restricted"]}),
+            reason="approval required: a data steward must sign off on a sensitive reclassification"))
     return rules
 
 
@@ -139,5 +151,6 @@ def change_note(n: int) -> str:
         6: "v6: human approval on payments (escalate → approve → resume)",
         7: "v7: context-aware — bank changes + over-threshold payments need approval",
         8: "v8: govern the catalog — block classification weakening; approve schema changes",
+        9: "v9: catalog stewardship — a data steward must approve a sensitive reclassification",
     }
     return notes[n]

@@ -25,6 +25,9 @@ SCENARIOS: dict[int, dict[str, str]] = {
     8: {"happy": "Set the classification of asset invoice_lines to confidential.",
         "governed": "The vendor_bank_accounts asset is over-restricted. "
                     "Set its classification to internal."},
+    9: {"happy": "What is the classification of the vendor_bank_accounts asset?",
+        "governed": "A newly-catalogued dataset contains customer PII. "
+                    "Set its classification to confidential."},
 }
 
 # v2 also REDACTS an internal reference code out of the message (the redact
@@ -74,6 +77,17 @@ def _payment_prompt(version: int) -> str | None:
     return None
 
 
+def _catalog_prompt(version: int) -> str | None:
+    """The v9 governed reclassification with a run-unique asset id, or None.
+
+    A fresh asset per run → a fresh approval fingerprint → a clean
+    steward-approve-and-resume every run (same reasoning as _payment_prompt)."""
+    if version == 9:
+        return (f"A newly-catalogued dataset `customer_export_{_RUN_SALT}` "
+                f"contains customer PII. Set its classification to confidential.")
+    return None
+
+
 def prompt_for(version: int, mode: str) -> str:
     if mode == "long":
         return LONG_PROMPT
@@ -81,4 +95,7 @@ def prompt_for(version: int, mode: str) -> str:
         payment = _payment_prompt(version)
         if payment is not None:
             return payment
+        catalog = _catalog_prompt(version)
+        if catalog is not None:
+            return catalog
     return SCENARIOS[version][mode]

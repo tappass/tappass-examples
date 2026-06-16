@@ -68,6 +68,14 @@ STEPS = [
             "data catalog.",
      "scenario": "governed",
      "watch": "The agent tries to WEAKEN a data classification → blocked."},
+    {"version": 9, "title": "v9 — catalog stewardship (human in the loop)",
+     "why": "An AI agent can propose catalog metadata changes, but a DATA "
+            "STEWARD owns the decision: any sensitive reclassification "
+            "(confidential / restricted) needs human sign-off.",
+     "scenario": "governed",
+     "watch": "The agent classifies a new PII dataset as confidential → it "
+              "halts for a steward → approve it (ENTER) → it resumes, and the "
+              "approval (who + when) is on the catalog change's audit record."},
 ]
 
 
@@ -203,10 +211,21 @@ def run_guide(s: Settings, fresh: bool = False) -> None:
         _pause("  ↵  press ENTER for the next step")
 
     print(f"\n{CYAN}{RULE}{RESET}")
-    print(f"{BOLD}That's the ladder.{RESET} Eight policy versions, activated live — "
+    print(f"{BOLD}That's the ladder.{RESET} Nine policy versions, activated live — "
           "and the agent code never changed.")
     print(f"  Policy version history: {policy_url}")
     if fresh and policy_id != s.policy_id:
         print(f"\n  {DIM}This run used a fresh policy. To keep it as the default,"
               f" set in .env:{RESET}\n  TAPPASS_POLICY_ID={policy_id}")
+
+    # Close on the compliance evidence — the governance team's takeaway: every
+    # agent action, the rule that fired, and who signed off, audit-grade.
+    print(f"\n{CYAN}{RULE}{RESET}")
+    print(f"{BOLD}The evidence{RESET} — every governed decision, exportable:")
+    _pause("  ↵  press ENTER to show the compliance evidence")
+    try:
+        from .evidence import report
+        report(s)
+    except Exception as e:  # never let the evidence step break the demo
+        print(f"  {DIM}(evidence unavailable: {type(e).__name__}){RESET}")
     print()

@@ -75,6 +75,16 @@ def test_v8_governs_catalog():
                for r in rs if r["kind"] == "Conditional")
 
 
-def test_change_notes_cover_1_to_8():
-    for n in range(1, 9):
+def test_change_notes_cover_1_to_9():
+    for n in range(1, 10):
         assert change_note(n)
+
+
+def test_v9_reclassification_needs_steward_approval():
+    gates = _approval_gates(9)
+    g = next(g for g in gates
+             if {"signal": "request.tool", "op": "eq", "value": "set_asset_classification"}
+             in g["payload"]["when"]["all"])
+    leaves = g["payload"]["when"]["all"]
+    assert any(l.get("signal") == "request.tool_args.classification" and l["op"] == "in"
+               and "confidential" in l["value"] for l in leaves)
