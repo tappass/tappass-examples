@@ -51,9 +51,15 @@ def _rate_rules(o: int) -> list[dict]:
 
 
 def _pii_rules(o: int) -> list[dict]:
+    # OUTPUT guards: block PII / secrets that would leak in the model's RESPONSE
+    # (POST phase — the kernel scans the response and blocks before it reaches the
+    # caller). Deliberately NOT input-PII rules: v11 routes the agent's input PII
+    # to the approved model, so blocking input PII here would shadow that route.
+    # Guarding the OUTPUT keeps the two orthogonal — input PII routes (PRE),
+    # output PII/secrets block (POST).
     return [
-        {"kind": "BlockSecrets", "ordinal": o, "payload": {}},
-        {"kind": "BlockPII", "ordinal": o + 1, "payload": {"scope": "output"}},
+        {"kind": "BlockResponseSecrets", "ordinal": o, "payload": {}},
+        {"kind": "BlockResponsePII", "ordinal": o + 1, "payload": {}},
     ]
 
 
@@ -94,7 +100,7 @@ def rules_for_version(n: int) -> list[dict]:
     if n == 3:
         return rules
 
-    rules += _pii_rules(3)                            # v4: output PII/secret block
+    rules += _pii_rules(3)                            # v4: output PII/secret guard (response scan)
 
     # v5: block the payment write. v6: supersede with approval. v7+: context-aware.
     #
@@ -167,7 +173,7 @@ def change_note(n: int) -> str:
         1: "v1: allow-all — observability only",
         2: "v2: govern the cow's words — block a banned name, redact emails",
         3: "v3: rate-limit send_reminder (3 calls / 30s, from the audit trail)",
-        4: "v4: secret scan + PII block on output",
+        4: "v4: response scan — block PII/secrets leaking in the model's output",
         5: "v5: tool-call enforcement — block the payment write",
         6: "v6: human approval on payments (escalate → approve → resume)",
         7: "v7: context-aware — bank changes + over-threshold payments need approval",

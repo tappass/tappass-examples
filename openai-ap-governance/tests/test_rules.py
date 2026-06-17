@@ -24,7 +24,11 @@ def test_v3_adds_cowsay_rate_limit():
 
 
 def test_v4_adds_output_pii_secrets():
-    assert {"BlockSecrets", "BlockPII"} <= set(_kinds(4))
+    # v4 guards the OUTPUT: response-scanning kinds (block PII/secrets that would
+    # leak in the model's response), NOT input-PII rules — so v11 can route input
+    # PII without v4 shadowing it.
+    assert {"BlockResponseSecrets", "BlockResponsePII"} <= set(_kinds(4))
+    assert "BlockPII" not in _kinds(4)
 
 
 def test_v5_blocks_payment_write():
