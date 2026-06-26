@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     s = Settings.load()
 
     if args.cmd == "setup":
-        out = provision_setup(s)
+        out = provision_setup(s, agent_id=s.agent_id)
         print("# Add these to openai-ap-governance/.env:")
         print(_env_dump({
             "TAPPASS_AGENT_KEY": out["agent_key"],
