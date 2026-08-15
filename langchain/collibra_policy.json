@@ -1,0 +1,33 @@
+{
+  "_comment": "Project policy snippet for the Collibra MCP demo. Paste the object under `policy` (or the equivalent fields in the dashboard's PolicyFloorEditor) into your project's policy on staging. Without this, the 'finance' scenario will NOT be blocked.",
+
+  "policy": {
+    "blocked_tools": [
+      "delete_asset"
+    ],
+
+    "tool_arg_constraints": [
+      {
+        "_purpose": "Writes to a schema must target an allow-listed schema.",
+        "tool": "create_table",
+        "arg": "schema",
+        "operator": "in",
+        "value": ["marketing", "sales"]
+      },
+      {
+        "_purpose": "Same rule for column additions — only the allowed schemas may be mutated.",
+        "tool": "create_column",
+        "arg": "schema",
+        "operator": "in",
+        "value": ["marketing", "sales"]
+      },
+      {
+        "_purpose": "Classification tags must come from the agreed taxonomy (no free-text labels in the catalog).",
+        "tool": "attach_classification",
+        "arg": "classification",
+        "operator": "in",
+        "value": ["Public", "Internal", "Confidential", "PII"]
+      }
+    ]
+  }
+}
